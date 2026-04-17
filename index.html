@@ -3,375 +3,157 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lezzet Defterim - Online Tarifler</title>
+    <title>Lezzet Defterim</title>
     
-    <!-- Tailwind CSS (Önce yüklenmeli) -->
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- React ve Babel -->
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <!-- React & Babel (Eski sürümlerle daha stabil çalışır) -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-    
+
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
-        
-        * {
-            font-family: 'Inter', sans-serif;
-        }
-
-        body {
-            background-color: #f8fafc;
-            margin: 0;
-            padding: 0;
-        }
-
-        .no-scrollbar::-webkit-scrollbar {
-            display: none;
-        }
-
-        .no-scrollbar {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
-        }
-
-        /* Tasarımın hemen yüklenmesi için yardımcı sınıflar */
-        .recipe-card {
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        
-        .recipe-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-        }
-    </script>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f1f5f9; }
+        .recipe-card { transition: all 0.2s; cursor: pointer; }
+        .recipe-card:hover { transform: translateY(-4px); }
+    </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
-        // Lucide ikonlarını React içinde güvenli bir şekilde render eden bileşen
-        const Icon = ({ name, size = 20, className = "", fill = "none" }) => {
-            const [svgContent, setSvgContent] = React.useState("");
-            
-            React.useEffect(() => {
-                const renderIcon = () => {
-                    if (window.lucide && window.lucide.icons[name]) {
-                        const iconData = window.lucide.icons[name];
-                        const svgHtml = iconData.map(tag => {
-                            const [tagName, attrs] = tag;
-                            const attrString = Object.entries(attrs)
-                                .map(([key, value]) => `${key}="${value}"`)
-                                .join(' ');
-                            return `<${tagName} ${attrString} />`;
-                        }).join('');
+        const { useState, useMemo } = React;
 
-                        setSvgContent(`
-                            <svg 
-                                xmlns="http://www.w3.org/2000/svg" 
-                                width="${size}" 
-                                height="${size}" 
-                                viewBox="0 0 24 24" 
-                                fill="${fill}" 
-                                stroke="currentColor" 
-                                stroke-width="2" 
-                                stroke-linecap="round" 
-                                stroke-linejoin="round" 
-                                class="${className}"
-                            >
-                                ${svgHtml}
-                            </svg>
-                        `);
-                    }
-                };
-
-                // Kütüphane yüklenene kadar küçük bir gecikme ile tekrar dene
-                if (!window.lucide) {
-                    const interval = setInterval(() => {
-                        if (window.lucide) {
-                            renderIcon();
-                            clearInterval(interval);
-                        }
-                    }, 100);
-                    return () => clearInterval(interval);
-                } else {
-                    renderIcon();
-                }
-            }, [name, size, className, fill]);
-
-            return <span style={{ display: 'inline-flex' }} dangerouslySetInnerHTML={{ __html: svgContent }} />;
+        // Basit İkon Bileşeni (Lucide yerine daha hızlı Emoji/Metin tabanlı)
+        const SimpleIcon = ({ type }) => {
+            const icons = {
+                plus: "＋",
+                search: "🔍",
+                heart: "♥",
+                clock: "🕒",
+                chef: "👨‍🍳",
+                back: "←",
+                trash: "🗑️",
+                book: "📖"
+            };
+            return <span className="mr-1">{icons[type]}</span>;
         };
 
         const App = () => {
-            const [recipes, setRecipes] = React.useState([
+            const [recipes, setRecipes] = useState([
                 {
                     id: 1,
                     title: 'Pesto Soslu Tavuklu Makarna',
                     category: 'Ana Yemekler',
                     ingredients: 'Penne makarna, Tavuk göğsü, Krema, Pesto sosu, Zeytinyağı',
-                    instructions: '1. Makarnayı tuzlu suda haşlayın.\n2. Tavukları küp küp doğrayıp zeytinyağında soteleyin.\n3. Krema ve pesto sosu ekleyip 2 dakika pişirin.\n4. Haşlanan makarnaları sosla birleştirip sıcak servis yapın.',
+                    instructions: '1. Makarnayı tuzlu suda haşlayın.\n2. Tavukları soteleyin.\n3. Sosla birleştirin.',
                     prepTime: '20 dk',
                     isFavorite: true
                 }
             ]);
 
-            const [searchTerm, setSearchTerm] = React.useState('');
-            const [selectedCategory, setSelectedCategory] = React.useState('Hepsi');
-            const [isAddingNew, setIsAddingNew] = React.useState(false);
-            const [viewingRecipe, setViewingRecipe] = React.useState(null);
-            const [activeTab, setActiveTab] = React.useState('explore');
+            const [searchTerm, setSearchTerm] = useState('');
+            const [selectedCategory, setSelectedCategory] = useState('Hepsi');
+            const [isAddingNew, setIsAddingNew] = useState(false);
+            const [viewingRecipe, setViewingRecipe] = useState(null);
 
-            const categories = ['Hepsi', 'Ana Yemekler', 'Tatlılar', 'Kahvaltılıklar', 'Salatalar', 'Çorbalar'];
+            const categories = ['Hepsi', 'Ana Yemekler', 'Tatlılar', 'Hamur İşleri', 'Salatalar'];
 
-            const [newRecipe, setNewRecipe] = React.useState({
-                title: '',
-                category: 'Ana Yemekler',
-                ingredients: '',
-                instructions: '',
-                prepTime: '',
-                isFavorite: false
+            const [newRecipe, setNewRecipe] = useState({
+                title: '', category: 'Ana Yemekler', ingredients: '', instructions: '', prepTime: '', isFavorite: false
             });
 
-            const filteredRecipes = React.useMemo(() => {
-                return recipes.filter(recipe => {
-                    const matchesSearch = recipe.title.toLowerCase().includes(searchTerm.toLowerCase());
-                    const matchesCategory = selectedCategory === 'Hepsi' || recipe.category === selectedCategory;
-                    const matchesTab = activeTab === 'explore' || recipe.isFavorite;
-                    return matchesSearch && matchesCategory && matchesTab;
+            const filteredRecipes = useMemo(() => {
+                return recipes.filter(r => {
+                    const matchesSearch = r.title.toLowerCase().includes(searchTerm.toLowerCase());
+                    const matchesCat = selectedCategory === 'Hepsi' || r.category === selectedCategory;
+                    return matchesSearch && matchesCat;
                 });
-            }, [recipes, searchTerm, selectedCategory, activeTab]);
+            }, [recipes, searchTerm, selectedCategory]);
 
-            const handleSaveRecipe = () => {
+            const saveRecipe = () => {
                 if (!newRecipe.title) return;
                 setRecipes([{ ...newRecipe, id: Date.now() }, ...recipes]);
-                setNewRecipe({ title: '', category: 'Ana Yemekler', ingredients: '', instructions: '', prepTime: '', isFavorite: false });
                 setIsAddingNew(false);
+                setNewRecipe({ title: '', category: 'Ana Yemekler', ingredients: '', instructions: '', prepTime: '', isFavorite: false });
             };
 
-            const toggleFavorite = (id, e) => {
-                if (e) e.stopPropagation();
-                setRecipes(prev => prev.map(r => r.id === id ? { ...r, isFavorite: !r.isFavorite } : r));
-                if (viewingRecipe && viewingRecipe.id === id) {
-                    setViewingRecipe(prev => ({ ...prev, isFavorite: !prev.isFavorite }));
-                }
-            };
-
-            const deleteRecipe = (id, e) => {
-                if (e) e.stopPropagation();
-                setRecipes(prev => prev.filter(r => r.id !== id));
-                if (viewingRecipe && viewingRecipe.id === id) setViewingRecipe(null);
-            };
-
-            // Tarif Detay Ekranı
+            // DETAY SAYFASI
             if (viewingRecipe) {
                 return (
-                    <div className="min-h-screen bg-white animate-in fade-in duration-300">
-                        <header className="border-b px-4 py-4 flex items-center justify-between sticky top-0 bg-white z-20">
-                            <button onClick={() => setViewingRecipe(null)} className="p-2 hover:bg-slate-100 rounded-full flex items-center gap-2 transition-colors">
-                                <Icon name="arrow-left" size={24} className="text-slate-600" />
-                                <span className="font-bold text-slate-600">Geri Dön</span>
-                            </button>
-                            <div className="flex items-center gap-2">
-                                <button onClick={() => toggleFavorite(viewingRecipe.id)} className={`p-2 rounded-full border transition-all ${viewingRecipe.isFavorite ? 'text-pink-500 bg-pink-50 border-pink-100' : 'text-slate-400 border-slate-100'}`}>
-                                    <Icon name="heart" fill={viewingRecipe.isFavorite ? "currentColor" : "none"} />
-                                </button>
-                                <button onClick={() => deleteRecipe(viewingRecipe.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all">
-                                    <Icon name="trash-2" />
-                                </button>
-                            </div>
-                        </header>
-                        <main className="max-w-3xl mx-auto p-6 space-y-8">
-                            <div>
-                                <span className="text-xs font-black text-orange-600 bg-orange-100 px-3 py-1 rounded-full uppercase tracking-tighter">{viewingRecipe.category}</span>
-                                <h1 className="text-4xl font-extrabold text-slate-900 mt-4">{viewingRecipe.title}</h1>
-                                <div className="flex gap-4 mt-6 text-slate-500 border-y py-4 border-slate-100">
-                                    <div className="flex items-center gap-2 font-semibold">
-                                        <Icon name="clock" className="text-orange-500" /> 
-                                        {viewingRecipe.prepTime || 'Süre Yok'}
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="grid gap-8">
-                                <section>
-                                    <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-800">
-                                        <Icon name="utensils" className="text-orange-500" /> Malzemeler
-                                    </h2>
-                                    <div className="bg-slate-50 p-6 rounded-3xl text-slate-700 leading-relaxed whitespace-pre-wrap shadow-inner border border-slate-100">
-                                        {viewingRecipe.ingredients}
-                                    </div>
-                                </section>
-                                <section>
-                                    <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-800">
-                                        <Icon name="book-open" className="text-orange-500" /> Hazırlanış
-                                    </h2>
-                                    <div className="text-slate-700 leading-relaxed whitespace-pre-wrap text-lg">
-                                        {viewingRecipe.instructions}
-                                    </div>
-                                </section>
-                            </div>
-                        </main>
+                    <div className="min-h-screen bg-white p-6 max-w-2xl mx-auto shadow-xl">
+                        <button onClick={() => setViewingRecipe(null)} className="text-orange-500 font-bold mb-6 block">
+                            <SimpleIcon type="back" /> Geri Dön
+                        </button>
+                        <span className="text-xs font-bold text-orange-500 bg-orange-50 px-2 py-1 rounded">{viewingRecipe.category}</span>
+                        <h1 className="text-3xl font-extrabold mt-2">{viewingRecipe.title}</h1>
+                        <div className="my-4 text-slate-500 border-b pb-4">
+                            <SimpleIcon type="clock" /> {viewingRecipe.prepTime}
+                        </div>
+                        <h2 className="text-xl font-bold mb-2">Malzemeler</h2>
+                        <div className="bg-slate-50 p-4 rounded-xl mb-6 whitespace-pre-wrap">{viewingRecipe.ingredients}</div>
+                        <h2 className="text-xl font-bold mb-2">Nasıl Yapılır?</h2>
+                        <p className="text-slate-700 leading-relaxed">{viewingRecipe.instructions}</p>
                     </div>
                 );
             }
 
-            // Yeni Tarif Ekleme Ekranı
+            // EKLEME SAYFASI
             if (isAddingNew) {
                 return (
-                    <div className="min-h-screen bg-white animate-in slide-in-from-bottom-4 duration-300">
-                        <header className="border-b px-4 py-4 flex items-center justify-between sticky top-0 bg-white z-20">
-                            <button onClick={() => setIsAddingNew(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
-                                <Icon name="x" size={24} className="text-slate-600" />
-                            </button>
-                            <h2 className="font-bold text-slate-800">Yeni Tarif</h2>
-                            <button onClick={handleSaveRecipe} className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-full font-bold shadow-md transition-all active:scale-95">
-                                Kaydet
-                            </button>
-                        </header>
-                        <main className="max-w-2xl mx-auto p-6 space-y-6">
-                            <input 
-                                type="text" 
-                                placeholder="Tarif Adı Ne Olsun?" 
-                                className="w-full text-3xl font-extrabold outline-none border-b-2 border-transparent focus:border-orange-200 py-2 placeholder:text-slate-200" 
-                                value={newRecipe.title} 
-                                onChange={e => setNewRecipe({...newRecipe, title: e.target.value})} 
-                                autoFocus
-                            />
-                            <div className="flex gap-2 overflow-x-auto no-scrollbar py-2">
-                                {categories.filter(c => c !== 'Hepsi').map(c => (
-                                    <button 
-                                        key={c}
-                                        onClick={() => setNewRecipe({...newRecipe, category: c})}
-                                        className={`px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap border-2 transition-all ${newRecipe.category === c ? 'bg-orange-500 border-orange-500 text-white' : 'bg-white border-slate-100 text-slate-500'}`}
-                                    >
-                                        {c}
-                                    </button>
-                                ))}
-                            </div>
-                            <div className="space-y-4">
-                                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                                    <div className="flex items-center gap-2 mb-2 text-slate-400 font-bold text-xs uppercase">
-                                        <Icon name="clock" size={14} /> Hazırlama Süresi
-                                    </div>
-                                    <input type="text" placeholder="Örn: 45 dk" className="w-full bg-transparent outline-none font-bold text-slate-700" value={newRecipe.prepTime} onChange={e => setNewRecipe({...newRecipe, prepTime: e.target.value})} />
-                                </div>
-                                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                                    <div className="flex items-center gap-2 mb-2 text-slate-400 font-bold text-xs uppercase">
-                                        <Icon name="utensils" size={14} /> Malzemeler
-                                    </div>
-                                    <textarea placeholder="Malzemeleri buraya yazın..." className="w-full h-32 bg-transparent outline-none text-slate-700 resize-none" value={newRecipe.ingredients} onChange={e => setNewRecipe({...newRecipe, ingredients: e.target.value})} />
-                                </div>
-                                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                                    <div className="flex items-center gap-2 mb-2 text-slate-400 font-bold text-xs uppercase">
-                                        <Icon name="book-open" size={14} /> Yapılış Aşamaları
-                                    </div>
-                                    <textarea placeholder="Tarifi adım adım anlatın..." className="w-full h-64 bg-transparent outline-none text-slate-700 resize-none" value={newRecipe.instructions} onChange={e => setNewRecipe({...newRecipe, instructions: e.target.value})} />
-                                </div>
-                            </div>
-                        </main>
+                    <div className="min-h-screen bg-white p-6 max-w-2xl mx-auto">
+                        <h1 className="text-2xl font-bold mb-6">Yeni Tarif</h1>
+                        <input className="w-full border p-3 rounded-xl mb-4" placeholder="Tarif Adı" value={newRecipe.title} onChange={e => setNewRecipe({...newRecipe, title: e.target.value})} />
+                        <select className="w-full border p-3 rounded-xl mb-4" value={newRecipe.category} onChange={e => setNewRecipe({...newRecipe, category: e.target.value})}>
+                            {categories.filter(c => c !== 'Hepsi').map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                        <textarea className="w-full border p-3 rounded-xl mb-4 h-32" placeholder="Malzemeler" value={newRecipe.ingredients} onChange={e => setNewRecipe({...newRecipe, ingredients: e.target.value})} />
+                        <textarea className="w-full border p-3 rounded-xl mb-4 h-32" placeholder="Yapılış" value={newRecipe.instructions} onChange={e => setNewRecipe({...newRecipe, instructions: e.target.value})} />
+                        <div className="flex gap-2">
+                            <button onClick={saveRecipe} className="bg-orange-500 text-white flex-1 p-3 rounded-xl font-bold">Kaydet</button>
+                            <button onClick={() => setIsAddingNew(false)} className="bg-slate-200 flex-1 p-3 rounded-xl font-bold">İptal</button>
+                        </div>
                     </div>
                 );
             }
 
-            // Ana Liste Ekranı
+            // ANA LİSTE
             return (
-                <div className="min-h-screen pb-20">
-                    <header className="bg-white border-b p-4 sticky top-0 z-30">
-                        <div className="max-w-5xl mx-auto space-y-4">
-                            <div className="flex justify-between items-center">
-                                <div className="flex items-center gap-2">
-                                    <div className="bg-orange-500 p-2 rounded-xl shadow-orange-200 shadow-lg">
-                                        <Icon name="chef-hat" className="text-white" size={24} />
-                                    </div>
-                                    <h1 className="text-xl font-black text-slate-900 tracking-tighter">LEZZET<span className="text-orange-500">DEFTERİM</span></h1>
-                                </div>
-                                <button onClick={() => setIsAddingNew(true)} className="bg-orange-500 hover:bg-orange-600 text-white p-2.5 rounded-full shadow-lg shadow-orange-200 transition-transform active:scale-95">
-                                    <Icon name="plus" size={24} />
-                                </button>
-                            </div>
-                            
-                            <div className="relative">
-                                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
-                                    <Icon name="search" size={18} />
-                                </div>
-                                <input 
-                                    type="text" 
-                                    placeholder="Tariflerinde ara..." 
-                                    className="w-full bg-slate-100 py-3.5 pl-12 pr-4 rounded-2xl outline-none border-2 border-transparent focus:border-orange-200 focus:bg-white transition-all shadow-inner" 
-                                    value={searchTerm} 
-                                    onChange={e => setSearchTerm(e.target.value)} 
-                                />
-                            </div>
+                <div className="max-w-4xl mx-auto p-4">
+                    <div className="flex justify-between items-center mb-6">
+                        <h1 className="text-2xl font-black text-slate-800">MUTFAK <span className="text-orange-500">NOTLARI</span></h1>
+                        <button onClick={() => setIsAddingNew(true)} className="bg-orange-500 text-white w-12 h-12 rounded-full font-bold shadow-lg">＋</button>
+                    </div>
 
-                            <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
-                                {categories.map(cat => (
-                                    <button 
-                                        key={cat} 
-                                        onClick={() => setSelectedCategory(cat)} 
-                                        className={`px-5 py-2.5 rounded-xl text-sm font-extrabold whitespace-nowrap transition-all border-2 ${selectedCategory === cat ? 'bg-slate-900 border-slate-900 text-white shadow-md' : 'bg-white border-slate-100 text-slate-500 hover:bg-slate-50'}`}
-                                    >
-                                        {cat}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    </header>
+                    <div className="mb-6">
+                        <input className="w-full p-4 rounded-2xl bg-white shadow-sm outline-none focus:ring-2 ring-orange-200" placeholder="Tariflerde ara..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                    </div>
 
-                    <main className="max-w-5xl mx-auto p-4 md:p-6">
-                        <div className="flex bg-slate-200/50 p-1 rounded-2xl mb-8 max-w-sm mx-auto">
-                            <button onClick={() => setActiveTab('explore')} className={`flex-1 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'explore' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>Keşfet</button>
-                            <button onClick={() => setActiveTab('favorites')} className={`flex-1 py-2.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all ${activeTab === 'favorites' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500'}`}>
-                                <Icon name="heart" size={16} fill={activeTab === 'favorites' ? "currentColor" : "none"} /> Favoriler
-                            </button>
-                        </div>
+                    <div className="flex gap-2 overflow-x-auto pb-4 mb-4">
+                        {categories.map(c => (
+                            <button key={c} onClick={() => setSelectedCategory(c)} className={`px-4 py-2 rounded-full whitespace-nowrap font-bold text-sm ${selectedCategory === c ? 'bg-slate-800 text-white' : 'bg-white text-slate-500 border'}`}>{c}</button>
+                        ))}
+                    </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {filteredRecipes.length > 0 ? (
-                                filteredRecipes.map(recipe => (
-                                    <div 
-                                        key={recipe.id} 
-                                        onClick={() => setViewingRecipe(recipe)} 
-                                        className="recipe-card bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm cursor-pointer group flex flex-col h-full"
-                                    >
-                                        <div className="flex justify-between items-start mb-4">
-                                            <span className="text-[10px] font-black uppercase text-orange-600 bg-orange-50 px-3 py-1.5 rounded-lg border border-orange-100 shadow-sm">{recipe.category}</span>
-                                            <button 
-                                                onClick={(e) => toggleFavorite(recipe.id, e)} 
-                                                className={`p-2 rounded-full hover:bg-slate-50 transition-colors ${recipe.isFavorite ? 'text-pink-500' : 'text-slate-200 group-hover:text-slate-300'}`}
-                                            >
-                                                <Icon name="heart" fill={recipe.isFavorite ? "currentColor" : "none"} />
-                                            </button>
-                                        </div>
-                                        <h3 className="text-xl font-extrabold mb-3 text-slate-800 leading-tight group-hover:text-orange-500 transition-colors">{recipe.title}</h3>
-                                        <div className="mt-auto pt-4 border-t border-slate-50 flex items-center justify-between text-slate-400 font-bold text-[11px] uppercase tracking-wider">
-                                            <div className="flex items-center gap-1.5">
-                                                <Icon name="clock" size={14} className="text-orange-300" /> {recipe.prepTime || 'N/A'}
-                                            </div>
-                                            <div className="text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                                                İncele <Icon name="chevron-right" size={14} />
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))
-                            ) : (
-                                <div className="col-span-full py-20 text-center">
-                                    <div className="bg-slate-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
-                                        <Icon name="search" size={32} className="text-slate-300" />
-                                    </div>
-                                    <p className="text-slate-400 font-bold">Aradığın kriterde bir tarif bulamadık.</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {filteredRecipes.map(r => (
+                            <div key={r.id} onClick={() => setViewingRecipe(r)} className="recipe-card bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                                <span className="text-[10px] font-bold text-orange-500 bg-orange-50 px-2 py-1 rounded uppercase tracking-widest">{r.category}</span>
+                                <h3 className="text-xl font-bold mt-2 mb-4">{r.title}</h3>
+                                <div className="flex justify-between items-center text-slate-400 text-sm font-bold">
+                                    <span><SimpleIcon type="clock" /> {r.prepTime}</span>
+                                    <span className="text-orange-500">İncele →</span>
                                 </div>
-                            )}
-                        </div>
-                    </main>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             );
         };
 
-        // Uygulamayı başlat
-        const rootElement = document.getElementById('root');
-        const root = ReactDOM.createRoot(rootElement);
+        const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
 </body>
