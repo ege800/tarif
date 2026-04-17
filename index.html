@@ -1,0 +1,425 @@
+import React, { useState, useMemo } from 'react';
+import { 
+  Plus, 
+  Search, 
+  Heart, 
+  ChefHat, 
+  Clock, 
+  Utensils, 
+  X, 
+  Trash2,
+  FileText,
+  Upload,
+  ArrowLeft,
+  Save,
+  File,
+  ChevronRight,
+  BookOpen
+} from 'lucide-react';
+
+const App = () => {
+  const [recipes, setRecipes] = useState([
+    {
+      id: 1,
+      title: 'Pesto Soslu Tavuklu Makarna',
+      category: 'Ana Yemekler',
+      ingredients: 'Penne makarna, Tavuk göğsü, Krema, Pesto sosu, Zeytinyağı',
+      instructions: '1. Makarnayı tuzlu suda haşlayın.\n2. Tavukları küp küp doğrayıp zeytinyağında soteleyin.\n3. Krema ve pesto sosu ekleyip 2 dakika pişirin.\n4. Haşlanan makarnaları sosla birleştirip sıcak servis yapın.',
+      prepTime: '20 dk',
+      isFavorite: true,
+      file: null
+    },
+    {
+      id: 2,
+      title: 'Çilekli Magnolia',
+      category: 'Tatlılar',
+      ingredients: '1 lt Süt, 1 su bardağı Şeker, 2 yemek kaşığı Un, 2 yemek kaşığı Nişasta, 1 paket Vanilya, Bisküvi, Çilek',
+      instructions: '1. Süt, şeker, un ve nişastayı tencerede koyulaşana kadar pişirin.\n2. Vanilyayı ekleyip soğumaya bırakın.\n3. Bisküvileri rondodan geçirin.\n4. Kaplara bir kat bisküvi, bir kat meyve ve bir kat muhallebi olacak şekilde dizin.',
+      prepTime: '30 dk',
+      isFavorite: false,
+      file: null
+    }
+  ]);
+
+  const categories = ['Hepsi', 'Ana Yemekler', 'Tatlılar', 'Kahvaltılıklar', 'Salatalar', 'Çorbalar'];
+  
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('Hepsi');
+  const [isAddingNew, setIsAddingNew] = useState(false);
+  const [viewingRecipe, setViewingRecipe] = useState(null); // Detay görme durumu
+  const [activeTab, setActiveTab] = useState('explore');
+
+  const [newRecipe, setNewRecipe] = useState({
+    title: '',
+    category: 'Ana Yemekler',
+    ingredients: '',
+    instructions: '',
+    prepTime: '',
+    isFavorite: false,
+    file: null
+  });
+
+  const filteredRecipes = useMemo(() => {
+    return recipes.filter(recipe => {
+      const matchesSearch = recipe.title.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesCategory = selectedCategory === 'Hepsi' || recipe.category === selectedCategory;
+      const matchesTab = activeTab === 'explore' || recipe.isFavorite;
+      return matchesSearch && matchesCategory && matchesTab;
+    });
+  }, [recipes, searchTerm, selectedCategory, activeTab]);
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setNewRecipe({ ...newRecipe, file: { name: file.name, type: file.type } });
+    }
+  };
+
+  const handleSaveRecipe = (e) => {
+    e.preventDefault();
+    if (!newRecipe.title) return;
+    
+    setRecipes([{ ...newRecipe, id: Date.now() }, ...recipes]);
+    setNewRecipe({
+      title: '',
+      category: 'Ana Yemekler',
+      ingredients: '',
+      instructions: '',
+      prepTime: '',
+      isFavorite: false,
+      file: null
+    });
+    setIsAddingNew(false);
+  };
+
+  const toggleFavorite = (id, e) => {
+    if (e) e.stopPropagation(); // Kart tıklamasını engelle
+    setRecipes(recipes.map(r => r.id === id ? { ...r, isFavorite: !r.isFavorite } : r));
+    if (viewingRecipe && viewingRecipe.id === id) {
+      setViewingRecipe({...viewingRecipe, isFavorite: !viewingRecipe.isFavorite});
+    }
+  };
+
+  const deleteRecipe = (id, e) => {
+    if (e) e.stopPropagation(); // Kart tıklamasını engelle
+    setRecipes(recipes.filter(r => r.id !== id));
+    if (viewingRecipe && viewingRecipe.id === id) setViewingRecipe(null);
+  };
+
+  // Detay Sayfası
+  if (viewingRecipe) {
+    return (
+      <div className="min-h-screen bg-white">
+        <header className="border-b px-4 py-4 flex items-center justify-between sticky top-0 bg-white z-20">
+          <button onClick={() => setViewingRecipe(null)} className="p-2 hover:bg-slate-100 rounded-full transition-colors flex items-center gap-2">
+            <ArrowLeft size={24} />
+            <span className="font-semibold hidden sm:inline text-slate-600">Geri Dön</span>
+          </button>
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={() => toggleFavorite(viewingRecipe.id)}
+              className={`p-2 rounded-full border transition-all ${viewingRecipe.isFavorite ? 'bg-pink-50 border-pink-100 text-pink-500' : 'bg-slate-50 border-slate-100 text-slate-400'}`}
+            >
+              <Heart size={20} fill={viewingRecipe.isFavorite ? 'currentColor' : 'none'} />
+            </button>
+            <button 
+              onClick={() => deleteRecipe(viewingRecipe.id)}
+              className="p-2 rounded-full border border-slate-100 bg-slate-50 text-slate-400 hover:text-red-500 transition-all"
+            >
+              <Trash2 size={20} />
+            </button>
+          </div>
+        </header>
+
+        <main className="max-w-3xl mx-auto p-6 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="space-y-4">
+            <span className="text-xs uppercase tracking-[0.2em] font-black text-orange-500 bg-orange-50 px-3 py-1 rounded-full">
+              {viewingRecipe.category}
+            </span>
+            <h1 className="text-4xl sm:text-5xl font-black text-slate-900 leading-tight">
+              {viewingRecipe.title}
+            </h1>
+            <div className="flex items-center gap-6 text-slate-500 font-medium border-y py-4 border-slate-100">
+              <div className="flex items-center gap-2">
+                <Clock size={20} className="text-orange-400" />
+                <span>{viewingRecipe.prepTime || 'Süre Belirtilmedi'}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <ChefHat size={20} className="text-orange-400" />
+                <span>Ev Yapımı</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-10">
+            <section className="space-y-4">
+              <div className="flex items-center gap-2 text-slate-800">
+                <div className="w-8 h-8 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center font-bold">1</div>
+                <h2 className="text-xl font-bold">Malzemeler</h2>
+              </div>
+              <div className="bg-slate-50 rounded-2xl p-6">
+                <ul className="space-y-3">
+                  {viewingRecipe.ingredients.split(',').map((ing, i) => (
+                    <li key={i} className="flex items-center gap-3 text-slate-700 border-b border-slate-200/50 pb-2 last:border-0 last:pb-0">
+                      <div className="w-1.5 h-1.5 rounded-full bg-orange-400" />
+                      {ing.trim()}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </section>
+
+            <section className="space-y-4">
+              <div className="flex items-center gap-2 text-slate-800">
+                <div className="w-8 h-8 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center font-bold">2</div>
+                <h2 className="text-xl font-bold">Nasıl Yapılır?</h2>
+              </div>
+              <div className="prose prose-slate max-w-none">
+                <p className="text-lg leading-relaxed text-slate-700 whitespace-pre-wrap">
+                  {viewingRecipe.instructions}
+                </p>
+              </div>
+            </section>
+
+            {viewingRecipe.file && (
+              <section className="pt-6 border-t">
+                <div className="bg-blue-50 border border-blue-100 rounded-2xl p-6 flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="bg-blue-500 p-3 rounded-xl text-white">
+                      <FileText size={24} />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-blue-900">Ekli Belge</h4>
+                      <p className="text-sm text-blue-700">{viewingRecipe.file.name}</p>
+                    </div>
+                  </div>
+                  <button className="bg-white text-blue-600 px-4 py-2 rounded-lg font-bold text-sm shadow-sm">Görüntüle</button>
+                </div>
+              </section>
+            )}
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // Yazma Sayfası
+  if (isAddingNew) {
+    return (
+      <div className="min-h-screen bg-white">
+        <header className="border-b px-4 py-4 flex items-center justify-between sticky top-0 bg-white z-20">
+          <div className="flex items-center gap-4">
+            <button onClick={() => setIsAddingNew(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+              <ArrowLeft size={24} />
+            </button>
+            <h1 className="text-xl font-bold">Yeni Tarif Yaz</h1>
+          </div>
+          <button 
+            onClick={handleSaveRecipe}
+            className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-full font-bold transition-all shadow-md active:scale-95"
+          >
+            <Save size={20} />
+            Kaydet
+          </button>
+        </header>
+
+        <main className="max-w-3xl mx-auto p-6 space-y-8 animate-in fade-in duration-300">
+          <div className="space-y-4">
+            <input 
+              type="text" 
+              placeholder="Tarif Başlığı..."
+              className="w-full text-4xl font-bold border-none outline-none placeholder:text-slate-200"
+              value={newRecipe.title}
+              onChange={e => setNewRecipe({...newRecipe, title: e.target.value})}
+              autoFocus
+            />
+            
+            <div className="flex flex-wrap gap-4 items-center text-sm">
+              <div className="flex items-center gap-2 bg-slate-100 rounded-lg pr-2">
+                 <select 
+                  className="bg-transparent px-4 py-2 outline-none font-bold text-slate-600 appearance-none"
+                  value={newRecipe.category}
+                  onChange={e => setNewRecipe({...newRecipe, category: e.target.value})}
+                >
+                  {categories.filter(c => c !== 'Hepsi').map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+                <ChevronRight size={14} className="text-slate-400 rotate-90" />
+              </div>
+              <div className="flex items-center gap-2 bg-slate-100 px-4 py-2 rounded-lg border border-transparent focus-within:border-orange-200 focus-within:bg-white transition-all">
+                <Clock size={18} className="text-slate-400" />
+                <input 
+                  type="text" 
+                  placeholder="Süre (Örn: 30 dk)"
+                  className="bg-transparent outline-none w-24 font-bold"
+                  value={newRecipe.prepTime}
+                  onChange={e => setNewRecipe({...newRecipe, prepTime: e.target.value})}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-orange-500 border-b pb-2">
+              <Utensils size={20} />
+              <h2 className="font-bold uppercase tracking-wider text-xs">Malzemeler</h2>
+            </div>
+            <textarea 
+              placeholder="Malzemeleri virgülle ayırarak yazın..."
+              className="w-full min-h-[80px] text-lg outline-none resize-none leading-relaxed text-slate-700 bg-orange-50/30 p-4 rounded-2xl"
+              value={newRecipe.ingredients}
+              onChange={e => setNewRecipe({...newRecipe, ingredients: e.target.value})}
+            />
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-orange-500 border-b pb-2">
+              <FileText size={20} />
+              <h2 className="font-bold uppercase tracking-wider text-xs">Nasıl Yapılır?</h2>
+            </div>
+            <textarea 
+              placeholder="Adım adım tarifinizi anlatın..."
+              className="w-full min-h-[400px] text-lg outline-none resize-none leading-relaxed text-slate-700 p-4"
+              value={newRecipe.instructions}
+              onChange={e => setNewRecipe({...newRecipe, instructions: e.target.value})}
+            />
+          </div>
+
+          <div className="space-y-4 pt-4">
+             <div className="border-2 border-dashed border-slate-200 rounded-2xl p-10 flex flex-col items-center justify-center gap-3 hover:border-orange-400 hover:bg-orange-50 transition-all cursor-pointer relative">
+              <input 
+                type="file" 
+                accept="application/pdf,image/*" 
+                className="absolute inset-0 opacity-0 cursor-pointer"
+                onChange={handleFileUpload}
+              />
+              <Upload size={32} className="text-slate-300" />
+              <span className="text-slate-500 font-bold">
+                {newRecipe.file ? newRecipe.file.name : 'PDF veya Belge Ekle'}
+              </span>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // Ana Liste Görünümü
+  return (
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-20">
+      <header className="bg-white border-b sticky top-0 z-10 px-4 py-4">
+        <div className="max-w-4xl mx-auto flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="bg-orange-500 p-2 rounded-xl text-white">
+                <ChefHat size={24} />
+              </div>
+              <h1 className="text-xl font-black tracking-tight uppercase">Mutfak<span className="text-orange-500">Notları</span></h1>
+            </div>
+            <button 
+              onClick={() => setIsAddingNew(true)}
+              className="bg-orange-500 hover:bg-orange-600 text-white flex items-center gap-2 px-6 py-2.5 rounded-full shadow-lg transition-all active:scale-95 font-bold"
+            >
+              <Plus size={20} />
+              Tarif Ekle
+            </button>
+          </div>
+
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+            <input 
+              type="text"
+              placeholder="Tariflerinde ara..."
+              className="w-full bg-slate-100 border-2 border-transparent focus:border-orange-200 focus:bg-white rounded-2xl py-3.5 pl-12 pr-4 transition-all outline-none"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+
+          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+            {categories.map(cat => (
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(cat)}
+                className={`whitespace-nowrap px-5 py-2 rounded-xl text-sm font-bold transition-all ${
+                  selectedCategory === cat 
+                  ? 'bg-slate-900 text-white shadow-md' 
+                  : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-4xl mx-auto p-4 sm:p-6">
+        <div className="flex bg-slate-200/50 p-1.5 rounded-2xl mb-8">
+           <button 
+            onClick={() => setActiveTab('explore')}
+            className={`flex-1 py-3 text-center rounded-xl font-bold transition-all ${activeTab === 'explore' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
+           >
+            Defterim
+           </button>
+           <button 
+            onClick={() => setActiveTab('favorites')}
+            className={`flex-1 py-3 text-center rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${activeTab === 'favorites' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500'}`}
+           >
+            <Heart size={18} fill={activeTab === 'favorites' ? 'currentColor' : 'none'} />
+            Favoriler
+           </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {filteredRecipes.length > 0 ? (
+            filteredRecipes.map(recipe => (
+              <div 
+                key={recipe.id} 
+                onClick={() => setViewingRecipe(recipe)}
+                className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100 flex flex-col hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer group"
+              >
+                <div className="flex justify-between items-start mb-4">
+                  <span className="text-[10px] uppercase tracking-widest font-black text-orange-500 bg-orange-50 px-3 py-1.5 rounded-full">
+                    {recipe.category}
+                  </span>
+                  <div className="flex gap-1">
+                    <button 
+                      onClick={(e) => toggleFavorite(recipe.id, e)}
+                      className={`p-2 rounded-full hover:bg-slate-50 transition-colors ${recipe.isFavorite ? 'text-pink-500' : 'text-slate-300'}`}
+                    >
+                      <Heart size={20} fill={recipe.isFavorite ? 'currentColor' : 'none'} />
+                    </button>
+                  </div>
+                </div>
+                
+                <h3 className="text-xl font-black mb-2 text-slate-800 group-hover:text-orange-600 transition-colors">{recipe.title}</h3>
+                
+                <div className="flex items-center gap-3 text-slate-400 text-xs font-bold mb-6">
+                  <div className="flex items-center gap-1">
+                    <Clock size={14} />
+                    <span>{recipe.prepTime || 'N/A'}</span>
+                  </div>
+                  {recipe.file && <FileText size={14} className="text-blue-400" />}
+                </div>
+
+                <div className="mt-auto flex items-center justify-between pt-4 border-t border-slate-50 text-slate-400">
+                  <span className="text-xs font-bold uppercase tracking-tighter">Detayları Gör</span>
+                  <ArrowLeft size={18} className="rotate-180 text-orange-500" />
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="col-span-full py-32 text-center text-slate-300">
+              <BookOpen size={64} className="mx-auto mb-4 opacity-10" />
+              <p className="text-lg font-bold">Aradığın lezzet burada değil gibi...</p>
+            </div>
+          )}
+        </div>
+      </main>
+    </div>
+  );
+};
+
+export default App;
