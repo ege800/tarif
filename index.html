@@ -35,17 +35,22 @@
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, query, doc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Global erişim için window objesine bağlayalım (Babel scripti için)
+        // Global erişim için window objesine bağlayalım
         window.fb = { initializeApp, getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, getFirestore, collection, addDoc, onSnapshot, query, doc, updateDoc };
     </script>
 
     <script type="text/babel">
         const { useState, useMemo, useEffect } = React;
-        
-        // Window objesine bağladığımız Firebase fonksiyonlarını alalım
         const { initializeApp, getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, getFirestore, collection, addDoc, onSnapshot, query, doc, updateDoc } = window.fb;
 
-        // Firebase Yapılandırması
+        // VERİTABANI MANTIĞI:
+        // Firestore bir "Belge" (Document) ve "Koleksiyon" (Collection) sistemidir.
+        // Restoran örneği:
+        // - 'recipes' koleksiyonu ana menüdür.
+        // - Her bir tarif bu menüdeki bir "kart" (belge) gibidir.
+        // - Sen bilgisayarda ekle dediğinde buluta yeni bir belge yazılır.
+        // - Telefonun ise bu koleksiyonu sürekli "dinler" (onSnapshot), değişiklik olunca kendini günceller.
+
         const firebaseConfig = JSON.parse(__firebase_config);
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
@@ -55,14 +60,12 @@
         const DEFAULT_RECIPES = [
             {
                 id: "default-1",
-                title: "Anne Köftesi",
+                title: "Restoran Başlangıç Köftesi",
                 category: "Ana Yemekler",
                 prepTime: "30",
-                ingredients: "500gr Kıyma\n1 adet Soğan\n1 adet Yumurta\nYarım demet Maydanoz\nGaleta unu, Tuz, Karabiber, Kimyon",
-                instructions: "1. Soğanı rendeleyin ve suyunu sıkın.\n2. Tüm malzemeleri yoğurun.\n3. Şekil verip kızartın.",
-                isFavorite: true,
-                link: "https://youtube.com",
-                linkText: "Videolu Anlatım"
+                ingredients: "500gr Kıyma\n1 adet Soğan\n1 adet Yumurta",
+                instructions: "Tüm malzemeleri yoğurun ve kızartın.",
+                isFavorite: true
             }
         ];
 
@@ -108,11 +111,14 @@
                 return () => unsubscribe();
             }, []);
 
+            // VERİTABANI BAĞLANTISI (Gerçek Zamanlı Senkronizasyon)
             useEffect(() => {
                 if (!user) return;
 
+                // Veritabanındaki 'recipes' (tarifler) çekmecesine ulaşıyoruz
                 const recipesCollection = collection(db, 'artifacts', appId, 'public', 'data', 'recipes');
                 
+                // Burası "canlı hat" kurar. Veritabanında bir şey değişirse bu fonksiyon otomatik çalışır.
                 const unsubscribe = onSnapshot(recipesCollection, (snapshot) => {
                     const cloudRecipes = snapshot.docs.map(doc => ({
                         ...doc.data(),
@@ -123,7 +129,7 @@
                     setRecipes([...DEFAULT_RECIPES, ...cloudRecipes]);
                     setLoading(false);
                 }, (error) => {
-                    console.error("Senkronizasyon hatası:", error);
+                    console.error("Veritabanı okuma hatası:", error);
                     setLoading(false);
                 });
 
@@ -133,6 +139,7 @@
             const toggleFavorite = async (e, recipe) => {
                 e.stopPropagation();
                 if (recipe.isCloud) {
+                    // Veritabanındaki belirli bir belgeyi güncelliyoruz
                     const recipeRef = doc(db, 'artifacts', appId, 'public', 'data', 'recipes', recipe.id);
                     await updateDoc(recipeRef, { isFavorite: !recipe.isFavorite });
                 } else {
@@ -147,6 +154,7 @@
                 if (!user) return;
 
                 try {
+                    // Veritabanındaki 'recipes' çekmecesine yeni bir dosya atıyoruz
                     const recipesCollection = collection(db, 'artifacts', appId, 'public', 'data', 'recipes');
                     await addDoc(recipesCollection, {
                         ...formData,
@@ -159,7 +167,7 @@
                     setIsAddMode(false);
                 } catch (error) {
                     console.error(error);
-                    alert("Tarif eklenirken bir hata oluştu.");
+                    alert("Veritabanına eklenirken hata oluştu.");
                 }
             };
 
@@ -180,15 +188,15 @@
                                 <SimpleIcon type="chef" />
                             </div>
                             <div>
-                                <h1 className="text-xl font-black italic tracking-tighter uppercase leading-none text-slate-900">LEZZET<span className="text-orange-500">DEFTERİM</span></h1>
-                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">Paylaşımlı Mutfak</p>
+                                <h1 className="text-xl font-black italic tracking-tighter uppercase leading-none text-slate-900">MENÜ<span className="text-orange-500">YÖNETİMİ</span></h1>
+                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">Bulut Veritabanı Aktif</p>
                             </div>
                         </div>
                         <button 
                             onClick={() => { setIsAddMode(!isAddMode); setViewingRecipe(null); }}
                             className={`px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center gap-2 ${isAddMode ? 'bg-slate-200 text-slate-600' : 'bg-orange-500 text-white shadow-lg shadow-orange-100'}`}
                         >
-                            <SimpleIcon type={isAddMode ? 'x' : 'plus'} /> {isAddMode ? 'VAZGEÇ' : 'YENİ TARİF'}
+                            <SimpleIcon type={isAddMode ? 'x' : 'plus'} /> {isAddMode ? 'VAZGEÇ' : 'YENİ ÜRÜN EKLE'}
                         </button>
                     </header>
 
@@ -197,7 +205,7 @@
                             <div className="relative mb-8">
                                 <input 
                                     className="w-full p-6 pl-14 rounded-[2rem] bg-white shadow-sm border border-slate-100 outline-none font-bold text-slate-700 focus:ring-2 ring-orange-100 transition-all" 
-                                    placeholder="Tarif ara..." 
+                                    placeholder="Menüde ara..." 
                                     value={searchTerm} 
                                     onChange={e => setSearchTerm(e.target.value)} 
                                 />
@@ -214,16 +222,10 @@
                                         {c}
                                     </button>
                                 ))}
-                                <button 
-                                    onClick={() => setShowFavsOnly(!showFavsOnly)}
-                                    className={`px-6 py-3 rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all border-2 whitespace-nowrap ${showFavsOnly ? 'bg-red-500 border-red-500 text-white shadow-lg' : 'bg-white border-slate-100 text-red-400 hover:border-red-200'}`}
-                                >
-                                    <SimpleIcon type="heart" active={showFavsOnly} /> FAVORİLER
-                                </button>
                             </div>
 
                             {loading ? (
-                                <div className="text-center py-20 animate-pulse text-slate-400 font-bold uppercase tracking-widest text-xs">Yükleniyor...</div>
+                                <div className="text-center py-20 animate-pulse text-slate-400 font-bold uppercase tracking-widest text-xs">Veritabanı Bağlanıyor...</div>
                             ) : (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                     {filtered.map(r => (
@@ -231,7 +233,7 @@
                                             <div className="flex justify-between items-start mb-6">
                                                 <div className="flex gap-2">
                                                     <span className="text-[10px] font-black bg-orange-50 text-orange-600 px-4 py-2 rounded-xl uppercase">{r.category}</span>
-                                                    {r.isCloud && <span className="text-[10px] font-black bg-blue-50 text-blue-600 px-4 py-2 rounded-xl uppercase">Ortak</span>}
+                                                    {r.isCloud && <span className="text-[10px] font-black bg-blue-50 text-blue-600 px-4 py-2 rounded-xl uppercase">Bulut Verisi</span>}
                                                 </div>
                                                 <button 
                                                     onClick={(e) => toggleFavorite(e, r)}
@@ -243,7 +245,7 @@
                                             <h3 className="text-2xl font-black text-slate-800 mb-8 leading-tight">{r.title}</h3>
                                             <div className="flex items-center text-[10px] font-black text-slate-400 gap-6 pt-6 border-t border-slate-50">
                                                 <span><SimpleIcon type="clock" /> {r.prepTime} DK</span>
-                                                <span className="ml-auto text-orange-500 uppercase tracking-widest group-hover:translate-x-1 transition-transform">Gör →</span>
+                                                <span className="ml-auto text-orange-500 uppercase tracking-widest group-hover:translate-x-1 transition-transform">Detay →</span>
                                             </div>
                                         </div>
                                     ))}
@@ -254,11 +256,11 @@
 
                     {isAddMode && (
                         <div className="fade-in bg-white rounded-[3rem] p-10 border border-slate-100 shadow-2xl">
-                            <h2 className="text-3xl font-black mb-10 italic tracking-tight text-slate-900">YENİ TARİF EKLE</h2>
+                            <h2 className="text-3xl font-black mb-10 italic tracking-tight text-slate-900">VERİTABANINA EKLE</h2>
                             <form onSubmit={handleAddNewRecipe} className="space-y-6">
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 ml-4 uppercase">Yemek İsmi</label>
-                                    <input required placeholder="Örn: Zeytinyağlı Sarma" className="w-full p-5 bg-slate-50 rounded-2xl border-none font-bold text-lg outline-none focus:ring-2 ring-orange-200" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
+                                    <label className="text-[10px] font-black text-slate-400 ml-4 uppercase">Ürün İsmi</label>
+                                    <input required placeholder="Örn: Izgara Levrek" className="w-full p-5 bg-slate-50 rounded-2xl border-none font-bold text-lg outline-none focus:ring-2 ring-orange-200" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
                                 </div>
                                 <div className="grid grid-cols-2 gap-6">
                                     <div className="space-y-2">
@@ -271,20 +273,16 @@
                                         </select>
                                     </div>
                                     <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 ml-4 uppercase">Süre (Dk)</label>
-                                        <input required placeholder="45" type="number" className="w-full p-5 bg-slate-50 rounded-2xl font-bold outline-none" value={formData.prepTime} onChange={e => setFormData({...formData, prepTime: e.target.value})} />
+                                        <label className="text-[10px] font-black text-slate-400 ml-4 uppercase">Hazırlık Süresi</label>
+                                        <input required placeholder="20" type="number" className="w-full p-5 bg-slate-50 rounded-2xl font-bold outline-none" value={formData.prepTime} onChange={e => setFormData({...formData, prepTime: e.target.value})} />
                                     </div>
                                 </div>
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 ml-4 uppercase">Malzemeler</label>
-                                    <textarea required placeholder="Her malzemeyi yeni satıra yazın..." className="w-full p-6 bg-slate-50 rounded-[2rem] h-32 font-medium outline-none" value={formData.ingredients} onChange={e => setFormData({...formData, ingredients: e.target.value})} />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 ml-4 uppercase">Nasıl Hazırlanır?</label>
-                                    <textarea required placeholder="Adım adım anlatın..." className="w-full p-6 bg-slate-50 rounded-[2rem] h-48 font-medium outline-none" value={formData.instructions} onChange={e => setFormData({...formData, instructions: e.target.value})} />
+                                    <label className="text-[10px] font-black text-slate-400 ml-4 uppercase">İçerik/Malzemeler</label>
+                                    <textarea required placeholder="Ürün içeriğini yazın..." className="w-full p-6 bg-slate-50 rounded-[2rem] h-32 font-medium outline-none" value={formData.ingredients} onChange={e => setFormData({...formData, ingredients: e.target.value})} />
                                 </div>
                                 <button type="submit" className="w-full bg-slate-900 text-white p-7 rounded-[2.5rem] font-black text-xl shadow-2xl hover:bg-orange-600 transition-all uppercase tracking-tighter mt-4 flex items-center justify-center gap-3">
-                                    <SimpleIcon type="check" /> HERKES İÇİN EKLE
+                                    <SimpleIcon type="check" /> VERİTABANINA GÖNDER
                                 </button>
                             </form>
                         </div>
@@ -294,10 +292,7 @@
                         <div className="bg-white rounded-[3rem] p-10 border border-slate-100 shadow-2xl fade-in">
                             <div className="flex justify-between items-center mb-10">
                                 <button onClick={() => setViewingRecipe(null)} className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-orange-500 transition-colors flex items-center gap-2">
-                                    ⬅ LİSTEYE DÖN
-                                </button>
-                                <button onClick={(e) => toggleFavorite(e, viewingRecipe)}>
-                                    <SimpleIcon type="heart" active={viewingRecipe.isFavorite} />
+                                    ⬅ MENÜYE DÖN
                                 </button>
                             </div>
                             
@@ -311,22 +306,16 @@
                             <div className="grid md:grid-cols-2 gap-12">
                                 <div className="space-y-6">
                                     <h4 className="font-black text-xs uppercase tracking-widest flex items-center gap-2 text-slate-800">
-                                        <span className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center"><SimpleIcon type="list" /></span> Malzemeler
+                                        <span className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center"><SimpleIcon type="list" /></span> İçerik
                                     </h4>
                                     <div className="bg-slate-50 p-8 rounded-[2rem] text-sm font-semibold text-slate-600 whitespace-pre-wrap border border-slate-100 italic">{viewingRecipe.ingredients}</div>
-                                </div>
-                                <div className="space-y-6">
-                                    <h4 className="font-black text-xs uppercase tracking-widest flex items-center gap-2 text-slate-800">
-                                        <span className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center"><SimpleIcon type="book" /></span> Nasıl Yapılır?
-                                    </h4>
-                                    <div className="text-slate-600 font-medium leading-relaxed whitespace-pre-wrap text-base">{viewingRecipe.instructions}</div>
                                 </div>
                             </div>
                         </div>
                     )}
 
                     <footer className="mt-20 text-center">
-                        <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.5em]">Koleksiyon Şefi • 2024</p>
+                        <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.5em]">Global Veritabanı Altyapısı • 2024</p>
                     </footer>
                 </div>
             );
