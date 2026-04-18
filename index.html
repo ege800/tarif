@@ -29,13 +29,32 @@
 <body>
     <div id="root"></div>
 
+    <!-- Firebase SDK Modülleri -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, doc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global erişim için window objesine bağlayalım (Babel scripti için)
+        window.fb = { initializeApp, getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, getFirestore, collection, addDoc, onSnapshot, query, doc, updateDoc };
+    </script>
+
     <script type="text/babel">
         const { useState, useMemo, useEffect } = React;
+        
+        // Window objesine bağladığımız Firebase fonksiyonlarını alalım
+        const { initializeApp, getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, getFirestore, collection, addDoc, onSnapshot, query, doc, updateDoc } = window.fb;
 
-        // Sabit ana tarifler (Kod içinde her zaman duracak olanlar)
+        // Firebase Yapılandırması
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
         const DEFAULT_RECIPES = [
             {
-                id: 1,
+                id: "default-1",
                 title: "Anne Köftesi",
                 category: "Ana Yemekler",
                 prepTime: "30",
@@ -44,17 +63,6 @@
                 isFavorite: true,
                 link: "https://youtube.com",
                 linkText: "Videolu Anlatım"
-            },
-            {
-                id: 2,
-                title: "Fırın Sütlaç",
-                category: "Tatlılar",
-                prepTime: "45",
-                ingredients: "1 lt Süt\n1 su bardağı Şeker\nYarım su bardağı Pirinç\n2 yemek kaşığı Nişasta",
-                instructions: "1. Pirinçleri haşlayın.\n2. Süt ve şekeri ekleyip kaynatın.\n3. Fırında kızartın.",
-                isFavorite: false,
-                link: "",
-                linkText: ""
             }
         ];
 
@@ -68,53 +76,91 @@
         };
 
         const App = () => {
-            // Başlangıçta hem varsayılanları hem de yerel hafızadakileri yükle
-            const [recipes, setRecipes] = useState(() => {
-                const saved = localStorage.getItem('my_custom_recipes');
-                const customRecipes = saved ? JSON.parse(saved) : [];
-                return [...DEFAULT_RECIPES, ...customRecipes];
-            });
-
+            const [user, setUser] = useState(null);
+            const [recipes, setRecipes] = useState(DEFAULT_RECIPES);
             const [searchTerm, setSearchTerm] = useState('');
             const [selectedCategory, setSelectedCategory] = useState('Hepsi');
             const [viewingRecipe, setViewingRecipe] = useState(null);
             const [showFavsOnly, setShowFavsOnly] = useState(false);
             const [isAddMode, setIsAddMode] = useState(false);
+            const [loading, setLoading] = useState(true);
 
-            // Form state
             const [formData, setFormData] = useState({
                 title: '', category: 'Ana Yemekler', prepTime: '', ingredients: '', instructions: '', link: '', linkText: ''
             });
 
-            // Favori değiştirme
-            const toggleFavorite = (e, id) => {
+            useEffect(() => {
+                const initAuth = async () => {
+                    try {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (error) {
+                        console.error("Kimlik doğrulama hatası:", error);
+                    }
+                };
+                initAuth();
+                const unsubscribe = onAuthStateChanged(auth, (u) => {
+                    setUser(u);
+                });
+                return () => unsubscribe();
+            }, []);
+
+            useEffect(() => {
+                if (!user) return;
+
+                const recipesCollection = collection(db, 'artifacts', appId, 'public', 'data', 'recipes');
+                
+                const unsubscribe = onSnapshot(recipesCollection, (snapshot) => {
+                    const cloudRecipes = snapshot.docs.map(doc => ({
+                        ...doc.data(),
+                        id: doc.id,
+                        isCloud: true
+                    }));
+                    
+                    setRecipes([...DEFAULT_RECIPES, ...cloudRecipes]);
+                    setLoading(false);
+                }, (error) => {
+                    console.error("Senkronizasyon hatası:", error);
+                    setLoading(false);
+                });
+
+                return () => unsubscribe();
+            }, [user]);
+
+            const toggleFavorite = async (e, recipe) => {
                 e.stopPropagation();
-                setRecipes(prev => prev.map(r => 
-                    r.id === id ? { ...r, isFavorite: !r.isFavorite } : r
-                ));
+                if (recipe.isCloud) {
+                    const recipeRef = doc(db, 'artifacts', appId, 'public', 'data', 'recipes', recipe.id);
+                    await updateDoc(recipeRef, { isFavorite: !recipe.isFavorite });
+                } else {
+                    setRecipes(prev => prev.map(r => 
+                        r.id === recipe.id ? { ...r, isFavorite: !r.isFavorite } : r
+                    ));
+                }
             };
 
-            // Yeni tarif ekleme (Doğrudan listeye)
-            const handleAddNewRecipe = (e) => {
+            const handleAddNewRecipe = async (e) => {
                 e.preventDefault();
-                const newRecipe = {
-                    ...formData,
-                    id: Date.now(), // Benzersiz ID
-                    isFavorite: false,
-                    isCustom: true // Kullanıcının eklediğini işaretle
-                };
+                if (!user) return;
 
-                const updatedRecipes = [...recipes, newRecipe];
-                setRecipes(updatedRecipes);
+                try {
+                    const recipesCollection = collection(db, 'artifacts', appId, 'public', 'data', 'recipes');
+                    await addDoc(recipesCollection, {
+                        ...formData,
+                        createdAt: new Date().toISOString(),
+                        isFavorite: false,
+                        createdBy: user.uid
+                    });
 
-                // Sadece kullanıcı tarafından eklenenleri yerel hafızaya kaydet
-                const customOnly = updatedRecipes.filter(r => r.isCustom);
-                localStorage.setItem('my_custom_recipes', JSON.stringify(customOnly));
-
-                // Formu temizle ve modu kapat
-                setFormData({ title: '', category: 'Ana Yemekler', prepTime: '', ingredients: '', instructions: '', link: '', linkText: '' });
-                setIsAddMode(false);
-                alert("Tarif başarıyla eklendi!");
+                    setFormData({ title: '', category: 'Ana Yemekler', prepTime: '', ingredients: '', instructions: '', link: '', linkText: '' });
+                    setIsAddMode(false);
+                } catch (error) {
+                    console.error(error);
+                    alert("Tarif eklenirken bir hata oluştu.");
+                }
             };
 
             const filtered = useMemo(() => {
@@ -134,8 +180,8 @@
                                 <SimpleIcon type="chef" />
                             </div>
                             <div>
-                                <h1 className="text-xl font-black italic tracking-tighter uppercase leading-none">LEZZET<span className="text-orange-500">DEFTERİM</span></h1>
-                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">Dijital Mutfak</p>
+                                <h1 className="text-xl font-black italic tracking-tighter uppercase leading-none text-slate-900">LEZZET<span className="text-orange-500">DEFTERİM</span></h1>
+                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">Paylaşımlı Mutfak</p>
                             </div>
                         </div>
                         <button 
@@ -176,35 +222,39 @@
                                 </button>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                {filtered.map(r => (
-                                    <div key={r.id} onClick={() => setViewingRecipe(r)} className="recipe-card bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative group">
-                                        <div className="flex justify-between items-start mb-6">
-                                            <div className="flex gap-2">
-                                                <span className="text-[10px] font-black bg-orange-50 text-orange-600 px-4 py-2 rounded-xl uppercase">{r.category}</span>
-                                                {r.isCustom && <span className="text-[10px] font-black bg-blue-50 text-blue-600 px-4 py-2 rounded-xl uppercase">Sizin</span>}
+                            {loading ? (
+                                <div className="text-center py-20 animate-pulse text-slate-400 font-bold uppercase tracking-widest text-xs">Yükleniyor...</div>
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    {filtered.map(r => (
+                                        <div key={r.id} onClick={() => setViewingRecipe(r)} className="recipe-card bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative group">
+                                            <div className="flex justify-between items-start mb-6">
+                                                <div className="flex gap-2">
+                                                    <span className="text-[10px] font-black bg-orange-50 text-orange-600 px-4 py-2 rounded-xl uppercase">{r.category}</span>
+                                                    {r.isCloud && <span className="text-[10px] font-black bg-blue-50 text-blue-600 px-4 py-2 rounded-xl uppercase">Ortak</span>}
+                                                </div>
+                                                <button 
+                                                    onClick={(e) => toggleFavorite(e, r)}
+                                                    className="hover:scale-125 transition-transform p-2"
+                                                >
+                                                    <SimpleIcon type="heart" active={r.isFavorite} />
+                                                </button>
                                             </div>
-                                            <button 
-                                                onClick={(e) => toggleFavorite(e, r.id)}
-                                                className="hover:scale-125 transition-transform p-2"
-                                            >
-                                                <SimpleIcon type="heart" active={r.isFavorite} />
-                                            </button>
+                                            <h3 className="text-2xl font-black text-slate-800 mb-8 leading-tight">{r.title}</h3>
+                                            <div className="flex items-center text-[10px] font-black text-slate-400 gap-6 pt-6 border-t border-slate-50">
+                                                <span><SimpleIcon type="clock" /> {r.prepTime} DK</span>
+                                                <span className="ml-auto text-orange-500 uppercase tracking-widest group-hover:translate-x-1 transition-transform">Gör →</span>
+                                            </div>
                                         </div>
-                                        <h3 className="text-2xl font-black text-slate-800 mb-8 leading-tight">{r.title}</h3>
-                                        <div className="flex items-center text-[10px] font-black text-slate-400 gap-6 pt-6 border-t border-slate-50">
-                                            <span><SimpleIcon type="clock" /> {r.prepTime} DK</span>
-                                            <span className="ml-auto text-orange-500 uppercase tracking-widest group-hover:translate-x-1 transition-transform">Gör →</span>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     )}
 
                     {isAddMode && (
                         <div className="fade-in bg-white rounded-[3rem] p-10 border border-slate-100 shadow-2xl">
-                            <h2 className="text-3xl font-black mb-10 italic tracking-tight">YENİ TARİF EKLE</h2>
+                            <h2 className="text-3xl font-black mb-10 italic tracking-tight text-slate-900">YENİ TARİF EKLE</h2>
                             <form onSubmit={handleAddNewRecipe} className="space-y-6">
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-slate-400 ml-4 uppercase">Yemek İsmi</label>
@@ -233,18 +283,8 @@
                                     <label className="text-[10px] font-black text-slate-400 ml-4 uppercase">Nasıl Hazırlanır?</label>
                                     <textarea required placeholder="Adım adım anlatın..." className="w-full p-6 bg-slate-50 rounded-[2rem] h-48 font-medium outline-none" value={formData.instructions} onChange={e => setFormData({...formData, instructions: e.target.value})} />
                                 </div>
-                                <div className="grid grid-cols-2 gap-6">
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 ml-4 uppercase">Link (Opsiyonel)</label>
-                                        <input placeholder="https://..." className="w-full p-5 bg-slate-50 rounded-2xl font-medium outline-none" value={formData.link} onChange={e => setFormData({...formData, link: e.target.value})} />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 ml-4 uppercase">Buton Metni</label>
-                                        <input placeholder="Videoyu İzle" className="w-full p-5 bg-slate-50 rounded-2xl font-medium outline-none" value={formData.linkText} onChange={e => setFormData({...formData, linkText: e.target.value})} />
-                                    </div>
-                                </div>
                                 <button type="submit" className="w-full bg-slate-900 text-white p-7 rounded-[2.5rem] font-black text-xl shadow-2xl hover:bg-orange-600 transition-all uppercase tracking-tighter mt-4 flex items-center justify-center gap-3">
-                                    <SimpleIcon type="check" /> TARİFİ LİSTEYE EKLE
+                                    <SimpleIcon type="check" /> HERKES İÇİN EKLE
                                 </button>
                             </form>
                         </div>
@@ -256,7 +296,7 @@
                                 <button onClick={() => setViewingRecipe(null)} className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-orange-500 transition-colors flex items-center gap-2">
                                     ⬅ LİSTEYE DÖN
                                 </button>
-                                <button onClick={(e) => { toggleFavorite(e, viewingRecipe.id); setViewingRecipe({...viewingRecipe, isFavorite: !viewingRecipe.isFavorite}) }}>
+                                <button onClick={(e) => toggleFavorite(e, viewingRecipe)}>
                                     <SimpleIcon type="heart" active={viewingRecipe.isFavorite} />
                                 </button>
                             </div>
@@ -266,22 +306,17 @@
                                     <span className="text-orange-500 font-black text-[11px] uppercase tracking-[0.2em]">{viewingRecipe.category}</span>
                                     <h2 className="text-5xl font-black text-slate-900 mt-2 tracking-tighter leading-tight">{viewingRecipe.title}</h2>
                                 </div>
-                                {viewingRecipe.link && (
-                                    <a href={viewingRecipe.link} target="_blank" rel="noopener noreferrer" className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all flex items-center gap-2 shadow-lg shadow-blue-100">
-                                        <SimpleIcon type="link" /> {viewingRecipe.linkText || "LİNKİ GÖR"}
-                                    </a>
-                                )}
                             </div>
                             
                             <div className="grid md:grid-cols-2 gap-12">
                                 <div className="space-y-6">
-                                    <h4 className="font-black text-xs uppercase tracking-widest flex items-center gap-2">
+                                    <h4 className="font-black text-xs uppercase tracking-widest flex items-center gap-2 text-slate-800">
                                         <span className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center"><SimpleIcon type="list" /></span> Malzemeler
                                     </h4>
                                     <div className="bg-slate-50 p-8 rounded-[2rem] text-sm font-semibold text-slate-600 whitespace-pre-wrap border border-slate-100 italic">{viewingRecipe.ingredients}</div>
                                 </div>
                                 <div className="space-y-6">
-                                    <h4 className="font-black text-xs uppercase tracking-widest flex items-center gap-2">
+                                    <h4 className="font-black text-xs uppercase tracking-widest flex items-center gap-2 text-slate-800">
                                         <span className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center"><SimpleIcon type="book" /></span> Nasıl Yapılır?
                                     </h4>
                                     <div className="text-slate-600 font-medium leading-relaxed whitespace-pre-wrap text-base">{viewingRecipe.instructions}</div>
