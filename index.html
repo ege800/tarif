@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lezzet Defterim - ProChef</title>
+    <title>Lezzet Defterim - ProChef & Gemini AI</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <style>
@@ -16,121 +16,306 @@
             font-family: 'Plus Jakarta Sans', sans-serif; 
             background-color: #f8fafc; 
             margin: 0;
-            color: #1e293b;
+            -webkit-tap-highlight-color: transparent;
         }
-        .recipe-card { transition: all 0.3s ease; cursor: pointer; }
-        .recipe-card:hover { transform: translateY(-4px); box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.1); }
+        .recipe-card { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; }
+        .recipe-card:hover { transform: translateY(-6px); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05); }
         .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .auth-card { animation: slideUp 0.6s ease-out; }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+        
         .shimmer {
-            background: linear-gradient(90deg, #f1f5f9 25%, #f8fafc 50%, #f1f5f9 75%);
+            background: linear-gradient(90deg, #f0f0f0 25%, #f8f8f8 50%, #f0f0f0 75%);
             background-size: 200% 100%;
             animation: shimmer 1.5s infinite;
         }
-        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
-    <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
+        import { getFirestore, collection, addDoc, query, onSnapshot, doc, updateDoc, deleteDoc, orderBy } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
 
-        // Emniyetli yapılandırma okuma
-        const getSafeConfig = (key, fallback) => {
-            try {
-                if (key === 'config') return JSON.parse(window.__firebase_config || '{}');
-                if (key === 'appId') return window.__app_id || fallback;
-                return fallback;
-            } catch (e) { return fallback; }
+        // Map Firebase to window for use in the Babel script
+        window.FB = { 
+            initializeApp, getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken,
+            getFirestore, collection, addDoc, query, onSnapshot, doc, updateDoc, deleteDoc, orderBy 
+        };
+    </script>
+
+    <script type="text/babel">
+        const { useState, useMemo, useEffect } = React;
+
+        const apiKey = ""; // Gemini API Key
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'lezzet-defteri';
+        
+        // Use the globally mapped FB object
+        const app = window.FB.initializeApp(firebaseConfig);
+        const auth = window.FB.getAuth(app);
+        const db = window.FB.getFirestore(app);
+
+        const MASTER_USER = "ustachef";
+        const MASTER_PASS = "HY0161";
+
+        const SimpleIcon = ({ type, active }) => {
+            const icons = {
+                plus: "＋", search: "🔍", heart: active ? "❤️" : "🤍", 
+                clock: "🕒", chef: "👨‍🍳", back: "⬅️", trash: "🗑️", 
+                book: "📖", x: "❌", logout: "🚪", user: "👤", lock: "🔒",
+                star: "⭐", list: "📜", link: "🔗", play: "▶️", magic: "✨", edit: "✏️", dot: "•"
+            };
+            return <span className={`inline-block ${active ? 'scale-110' : ''}`}>{icons[type]}</span>;
         };
 
-        const firebaseConfig = getSafeConfig('config', {});
-        const appId = getSafeConfig('appId', 'lezzet-defteri-default');
-        const apiKey = ""; // Gemini API Key
-
         const App = () => {
+            const [user, setUser] = useState(null);
             const [isLoggedIn, setIsLoggedIn] = useState(false);
             const [recipes, setRecipes] = useState([]);
-            const [loading, setLoading] = useState(false);
-            const [viewingRecipe, setViewingRecipe] = useState(null);
-            const [isAddingNew, setIsAddingNew] = useState(false);
-            const [selectedCategory, setSelectedCategory] = useState('Hepsi');
-            const [searchTerm, setSearchTerm] = useState('');
+            const [loading, setLoading] = useState(true);
+            const [nameInput, setNameInput] = useState('');
+            const [passInput, setPassInput] = useState('');
+            const [error, setError] = useState('');
+            
             const [aiLoading, setAiLoading] = useState(false);
+            
+            const categories = ['Hepsi', 'Ana Yemekler', 'Tatlılar', 'Hamur İşleri', 'Salatalar', 'Çorbalar'];
+            const [selectedCategory, setSelectedCategory] = useState('Hepsi');
+            const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+            const [searchTerm, setSearchTerm] = useState('');
+            
+            const [isAddingNew, setIsAddingNew] = useState(false);
+            const [isEditing, setIsEditing] = useState(false);
+            const [editingId, setEditingId] = useState(null);
+            const [viewingRecipe, setViewingRecipe] = useState(null);
 
-            // Form State
-            const [formData, setFormData] = useState({
-                title: '', ingredients: '', instructions: '', prepTime: '', category: 'Ana Yemekler', link: ''
-            });
+            const [formTitle, setFormTitle] = useState('');
+            const [formIngredients, setFormIngredients] = useState('');
+            const [formInstructions, setFormInstructions] = useState('');
+            const [formPrepTime, setFormPrepTime] = useState('');
+            const [formCategory, setFormCategory] = useState('Ana Yemekler');
+            const [formLink, setFormLink] = useState('');
 
-            // LocalStorage ile basit oturum takibi (Firebase Auth'a ek olarak)
+            // Auth Logic
             useEffect(() => {
-                if (localStorage.getItem('chef_logged_in') === 'true') {
-                    setIsLoggedIn(true);
-                }
+                const initAuth = async () => {
+                    try {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await window.FB.signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await window.FB.signInAnonymously(auth);
+                        }
+                    } catch (e) { 
+                        console.error("Auth initialization error:", e); 
+                    }
+                };
+                initAuth();
+                const unsubscribe = window.FB.onAuthStateChanged(auth, (currentUser) => {
+                    setUser(currentUser);
+                    if (localStorage.getItem('chef_session_v3') === 'active') {
+                        setIsLoggedIn(true);
+                    }
+                    setLoading(false);
+                });
+                return () => unsubscribe();
             }, []);
 
-            const categories = ['Hepsi', 'Ana Yemekler', 'Tatlılar', 'Hamur İşleri', 'Salatalar', 'Çorbalar'];
+            // Firestore Data Sync
+            useEffect(() => {
+                if (!user || !isLoggedIn) return;
+                
+                const q = window.FB.query(
+                    window.FB.collection(db, 'artifacts', appId, 'public', 'data', 'recipes')
+                );
+                
+                const unsubscribe = window.FB.onSnapshot(q, 
+                    (snapshot) => {
+                        const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        setRecipes(list.sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0)));
+                    }, 
+                    (err) => console.error("Firestore error:", err)
+                );
+                return () => unsubscribe();
+            }, [user, isLoggedIn]);
 
-            const handleLogin = (e) => {
-                e.preventDefault();
-                const user = e.target.username.value;
-                const pass = e.target.password.value;
-                if (user.toLowerCase() === 'ustachef' && pass === 'HY0161') {
-                    setIsLoggedIn(true);
-                    localStorage.setItem('chef_logged_in', 'true');
-                } else {
-                    alert('Hatalı giriş şefim!');
-                }
-            };
-
-            const generateWithAI = async () => {
-                if (!formData.title) return alert("Önce bir yemek adı yazmalısın şefim!");
+            const generateAiRecipe = async () => {
+                if (!formTitle) return;
                 setAiLoading(true);
                 try {
-                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            contents: [{ parts: [{ text: `"${formData.title}" yemeği için profesyonel tarif yaz. Yanıt JSON: { "ingredients": "malzemeler (her satıra bir tane)", "instructions": "hazırlanış", "prepTime": "dakika", "category": "Kategori" }. Kategoriler: Ana Yemekler, Tatlılar, Hamur İşleri, Salatalar, Çorbalar.` }] }],
-                            generationConfig: { responseMimeType: "application/json" }
-                        })
-                    });
-                    const data = await response.json();
-                    const result = JSON.parse(data.candidates[0].content.parts[0].text);
-                    setFormData({ ...formData, ...result });
-                } catch (e) {
-                    console.error("AI Hatası:", e);
+                    // Use exponential backoff for the fetch request as per guidelines
+                    const fetchWithRetry = async (retries = 5, delay = 1000) => {
+                        try {
+                            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    contents: [{ parts: [{ text: `Aşağıdaki yemek için profesyonel bir tarif oluştur: "${formTitle}". Yanıtı JSON formatında ver: { "ingredients": "her malzemeyi yeni satırda yaz (\\n ile)", "instructions": "hazırlanış adımları string", "prepTime": "dakika cinsinden sayı", "category": "Kategori adı" }. Kategoriler şunlardan biri olmalı: Ana Yemekler, Tatlılar, Hamur İşleri, Salatalar, Çorbalar. Dili Türkçe olsun.` }] }],
+                                    generationConfig: { 
+                                        responseMimeType: "application/json",
+                                        responseSchema: {
+                                            type: "OBJECT",
+                                            properties: {
+                                                ingredients: { type: "STRING" },
+                                                instructions: { type: "STRING" },
+                                                prepTime: { type: "STRING" },
+                                                category: { type: "STRING" }
+                                            }
+                                        }
+                                    }
+                                })
+                            });
+                            if (!response.ok) throw new Error('API Error');
+                            return await response.json();
+                        } catch (err) {
+                            if (retries > 0) {
+                                await new Promise(resolve => setTimeout(resolve, delay));
+                                return fetchWithRetry(retries - 1, delay * 2);
+                            }
+                            throw err;
+                        }
+                    };
+
+                    const data = await fetchWithRetry();
+                    const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                    if (resultText) {
+                        const parsed = JSON.parse(resultText);
+                        setFormIngredients(parsed.ingredients || "");
+                        setFormInstructions(parsed.instructions || "");
+                        setFormPrepTime(parsed.prepTime || "");
+                        setFormCategory(parsed.category || 'Ana Yemekler');
+                    }
+                } catch (err) {
+                    console.error("AI Generation Error:", err);
                 } finally {
                     setAiLoading(false);
                 }
             };
 
-            const saveRecipe = (e) => {
+            const handleLogin = (e) => {
                 e.preventDefault();
-                const newRecipe = { ...formData, id: Date.now(), isFavorite: false, createdAt: Date.now() };
-                const updatedRecipes = [newRecipe, ...recipes];
-                setRecipes(updatedRecipes);
-                setIsAddingNew(false);
-                setFormData({ title: '', ingredients: '', instructions: '', prepTime: '', category: 'Ana Yemekler', link: '' });
-                // Not: Burada Firebase addDoc kullanılabilir, şimdilik UI odaklı gidiyoruz.
+                if (nameInput.toLowerCase() === MASTER_USER && passInput === MASTER_PASS) {
+                    setIsLoggedIn(true);
+                    localStorage.setItem('chef_session_v3', 'active');
+                } else { 
+                    setError('Hatalı bilgiler şefim!'); 
+                }
             };
 
-            const filteredRecipes = recipes.filter(r => 
-                (selectedCategory === 'Hepsi' || r.category === selectedCategory) &&
-                r.title.toLowerCase().includes(searchTerm.toLowerCase())
-            );
+            const handleLogout = () => {
+                setIsLoggedIn(false);
+                localStorage.removeItem('chef_session_v3');
+            };
+
+            const toggleFavorite = async (e, recipe) => {
+                e.stopPropagation();
+                if (!user) return;
+                try {
+                    const docRef = window.FB.doc(db, 'artifacts', appId, 'public', 'data', 'recipes', recipe.id);
+                    await window.FB.updateDoc(docRef, { isFavorite: !recipe.isFavorite });
+                    if (viewingRecipe?.id === recipe.id) {
+                        setViewingRecipe({...viewingRecipe, isFavorite: !recipe.isFavorite});
+                    }
+                } catch (err) { console.error("Fav update error:", err); }
+            };
+
+            const startEditing = (recipe) => {
+                setFormTitle(recipe.title);
+                setFormIngredients(recipe.ingredients);
+                setFormInstructions(recipe.instructions);
+                setFormPrepTime(recipe.prepTime);
+                setFormCategory(recipe.category);
+                setFormLink(recipe.link || '');
+                setEditingId(recipe.id);
+                setIsEditing(true);
+                setViewingRecipe(null);
+            };
+
+            const saveRecipe = async (e) => {
+                e.preventDefault();
+                if (!formTitle || !user) return;
+                
+                let linkVal = formLink || "";
+                if (linkVal && !linkVal.startsWith('http')) linkVal = 'https://' + linkVal;
+
+                const recipeData = {
+                    title: formTitle, 
+                    category: formCategory, 
+                    prepTime: formPrepTime,
+                    ingredients: formIngredients, 
+                    instructions: formInstructions,
+                    link: linkVal,
+                    updatedAt: Date.now()
+                };
+
+                try {
+                    if (isEditing && editingId) {
+                        const docRef = window.FB.doc(db, 'artifacts', appId, 'public', 'data', 'recipes', editingId);
+                        await window.FB.updateDoc(docRef, recipeData);
+                    } else {
+                        await window.FB.addDoc(window.FB.collection(db, 'artifacts', appId, 'public', 'data', 'recipes'), {
+                            ...recipeData,
+                            isFavorite: false, 
+                            createdAt: Date.now(), 
+                            owner: user.uid
+                        });
+                    }
+                    resetForm();
+                    setIsAddingNew(false);
+                    setIsEditing(false);
+                } catch (err) { console.error("Save error:", err); }
+            };
+
+            const deleteRecipeAction = async (recipeId) => {
+                if (!user) return;
+                try {
+                    const docRef = window.FB.doc(db, 'artifacts', appId, 'public', 'data', 'recipes', recipeId);
+                    await window.FB.deleteDoc(docRef);
+                    setViewingRecipe(null);
+                } catch (err) { console.error("Delete error:", err); }
+            };
+
+            const resetForm = () => {
+                setFormTitle('');
+                setFormIngredients('');
+                setFormInstructions('');
+                setFormPrepTime('');
+                setFormCategory('Ana Yemekler');
+                setFormLink('');
+                setViewingRecipe(null);
+                setEditingId(null);
+            };
+
+            const filteredRecipes = useMemo(() => {
+                return recipes.filter(r => {
+                    const matchesSearch = r.title.toLowerCase().includes(searchTerm.toLowerCase());
+                    const matchesCat = selectedCategory === 'Hepsi' || r.category === selectedCategory;
+                    const matchesFav = !showFavoritesOnly || r.isFavorite;
+                    return matchesSearch && matchesCat && matchesFav;
+                });
+            }, [recipes, searchTerm, selectedCategory, showFavoritesOnly]);
+
+            if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 font-bold text-slate-400 italic">MUTFAK HAZIRLANIYOR...</div>;
 
             if (!isLoggedIn) {
                 return (
-                    <div className="min-h-screen flex items-center justify-center p-6 bg-slate-100">
-                        <div className="bg-white w-full max-w-md rounded-[2.5rem] p-10 shadow-2xl text-center">
-                            <div className="text-5xl mb-6">👨‍🍳</div>
-                            <h1 className="text-3xl font-black italic mb-8">PRO<span className="text-orange-500">CHEF</span> LOGIN</h1>
-                            <form onSubmit={handleLogin} className="space-y-4">
-                                <input name="username" type="text" placeholder="Şef Adı" className="w-full p-4 bg-slate-50 rounded-2xl border-2 border-transparent focus:border-orange-500 outline-none font-bold transition-all" />
-                                <input name="password" type="password" placeholder="Şifre" className="w-full p-4 bg-slate-50 rounded-2xl border-2 border-transparent focus:border-orange-500 outline-none font-bold transition-all" />
-                                <button type="submit" className="w-full bg-orange-500 text-white p-4 rounded-2xl font-black text-lg shadow-lg hover:bg-orange-600 active:scale-95 transition-all">GİRİŞ YAP</button>
+                    <div className="min-h-screen flex items-center justify-center p-6 bg-slate-50">
+                        <div className="bg-white w-full max-w-md rounded-[3rem] p-10 shadow-xl border border-slate-100 auth-card text-center">
+                            <div className="text-4xl mb-4 bg-orange-100 w-20 h-20 flex items-center justify-center rounded-3xl mx-auto"><SimpleIcon type="chef" /></div>
+                            <h1 className="text-3xl font-black text-slate-900 italic uppercase tracking-tighter mb-2">PRO<span className="text-orange-500 not-italic">CHEF</span></h1>
+                            <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-10">Özel Tarif Defteri</p>
+                            <form onSubmit={handleLogin} className="space-y-4 text-left">
+                                <input type="text" placeholder="İsim Kodu" className="w-full bg-slate-50 border-2 border-slate-100 p-5 rounded-2xl outline-none focus:border-orange-500 font-bold transition-all" value={nameInput} onChange={e => setNameInput(e.target.value)} />
+                                <input type="password" placeholder="Şifre" className="w-full bg-slate-50 border-2 border-slate-100 p-5 rounded-2xl outline-none focus:border-orange-500 font-bold transition-all" value={passInput} onChange={e => setPassInput(e.target.value)} />
+                                {error && <div className="text-red-500 text-xs font-bold text-center bg-red-50 p-3 rounded-xl">{error}</div>}
+                                <button type="submit" className="w-full bg-orange-500 text-white p-5 rounded-2xl font-black text-lg shadow-lg hover:bg-orange-600 active:scale-95 transition-all">DEFTERİ AÇ</button>
                             </form>
                         </div>
                     </div>
@@ -138,132 +323,139 @@
             }
 
             return (
-                <div className="max-w-4xl mx-auto p-6 pb-20">
-                    <header className="flex justify-between items-center mb-10">
+                <div className="max-w-4xl mx-auto p-4 md:p-8 pb-24">
+                    <header className="flex justify-between items-start mb-10">
                         <div>
-                            <h1 className="text-3xl font-black italic tracking-tighter">LEZZET<span className="text-orange-500 not-italic">DEFTERİM</span></h1>
-                            <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Şef PROCHEF Mutfakta</p>
+                            <h1 className="text-3xl font-black text-slate-900 italic tracking-tighter">LEZZET<span className="text-orange-500 not-italic">DEFTERİM</span></h1>
+                            <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mt-1">Hoş Geldin Şef PROCHEF</p>
                         </div>
-                        <button onClick={() => setIsAddingNew(true)} className="bg-orange-500 text-white w-14 h-14 rounded-2xl flex items-center justify-center shadow-xl hover:scale-105 transition-all text-2xl font-bold">＋</button>
+                        <div className="flex gap-3">
+                            <button onClick={() => {resetForm(); setIsAddingNew(true);}} className="bg-orange-500 text-white w-14 h-14 rounded-2xl flex items-center justify-center shadow-xl hover:scale-105 transition-all text-2xl"><SimpleIcon type="plus" /></button>
+                            <button onClick={handleLogout} className="bg-white text-slate-300 w-14 h-14 rounded-2xl flex items-center justify-center border border-slate-100 hover:text-red-500 transition-colors"><SimpleIcon type="logout" /></button>
+                        </div>
                     </header>
 
-                    {!isAddingNew && !viewingRecipe && (
+                    {!isAddingNew && !isEditing && !viewingRecipe && (
                         <>
-                            <input 
-                                className="w-full p-5 rounded-2xl bg-white shadow-sm border border-slate-100 mb-6 outline-none focus:ring-2 ring-orange-100 transition-all font-medium" 
-                                placeholder="Tariflerde ara..." 
-                                onChange={e => setSearchTerm(e.target.value)}
-                            />
-                            <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar mb-6">
-                                {categories.map(c => (
-                                    <button 
-                                        key={c} 
-                                        onClick={() => setSelectedCategory(c)} 
-                                        className={`px-6 py-3 rounded-xl font-bold text-xs whitespace-nowrap transition-all ${selectedCategory === c ? 'bg-slate-900 text-white shadow-md' : 'bg-white text-slate-400'}`}
-                                    >
-                                        {c}
-                                    </button>
-                                ))}
+                            <div className="relative mb-6">
+                                <div className="absolute left-5 top-1/2 -translate-y-1/2 opacity-30"><SimpleIcon type="search" /></div>
+                                <input className="w-full p-5 pl-14 rounded-2xl bg-white shadow-sm border border-slate-100 outline-none focus:border-orange-200 transition-all font-medium" placeholder="Tariflerde ara..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar mb-4">
+                                {categories.map(c => (
+                                    <button key={c} onClick={() => {setSelectedCategory(c); setShowFavoritesOnly(false);}} className={`px-6 py-3 rounded-xl font-bold text-xs whitespace-nowrap transition-all border-2 ${selectedCategory === c && !showFavoritesOnly ? 'bg-slate-900 border-slate-900 text-white shadow-md' : 'bg-white border-slate-100 text-slate-400'}`}>{c}</button>
+                                ))}
+                                <button onClick={() => {setShowFavoritesOnly(!showFavoritesOnly); setSelectedCategory('Hepsi');}} className={`px-6 py-3 rounded-xl font-bold text-xs whitespace-nowrap transition-all border-2 ${showFavoritesOnly ? 'bg-pink-500 border-pink-500 text-white shadow-md' : 'bg-white border-slate-100 text-pink-400'}`}>
+                                    <SimpleIcon type="heart" active={showFavoritesOnly} /> Favoriler
+                                </button>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in duration-500">
                                 {filteredRecipes.map(r => (
-                                    <div key={r.id} onClick={() => setViewingRecipe(r)} className="recipe-card bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
-                                        <div className="flex justify-between items-start mb-4">
-                                            <span className="text-[10px] font-bold text-orange-500 bg-orange-50 px-3 py-1 rounded-lg uppercase">{r.category}</span>
+                                    <div key={r.id} onClick={() => setViewingRecipe(r)} className="recipe-card bg-white p-7 rounded-[2.5rem] shadow-sm border border-slate-100 relative group">
+                                        <div className="flex justify-between items-start mb-5">
+                                            <span className="text-[9px] font-black text-orange-500 bg-orange-50 px-3 py-1.5 rounded-lg uppercase tracking-wider">{r.category}</span>
+                                            <button onClick={(e) => toggleFavorite(e, r)} className="p-2 hover:bg-slate-50 rounded-xl transition-colors">
+                                                <SimpleIcon type="heart" active={r.isFavorite} />
+                                            </button>
                                         </div>
-                                        <h3 className="text-xl font-black text-slate-800 mb-4">{r.title}</h3>
-                                        <div className="text-slate-400 text-[10px] font-bold uppercase flex justify-between items-center">
-                                            <span>🕒 {r.prepTime} DK</span>
-                                            <span className="text-orange-500">GÖRÜNTÜLE →</span>
+                                        <h3 className="text-xl font-black text-slate-800 mb-6 group-hover:text-orange-500 transition-colors leading-snug">{r.title}</h3>
+                                        <div className="pt-5 border-t border-slate-50 flex items-center justify-between text-slate-400 text-[10px] font-bold uppercase tracking-widest">
+                                            <div className="flex items-center gap-2"><SimpleIcon type="clock" /> {r.prepTime || '-'} DK</div>
+                                            <span className="text-orange-400">TARİFE GİT →</span>
                                         </div>
                                     </div>
                                 ))}
-                                {filteredRecipes.length === 0 && (
-                                    <div className="col-span-full py-20 text-center text-slate-300 font-bold border-2 border-dashed border-slate-200 rounded-[2rem]">
-                                        Henüz tarif yok şefim, bir tane ekle!
-                                    </div>
-                                )}
+                                {filteredRecipes.length === 0 && <div className="col-span-full text-center py-20 bg-white rounded-[3rem] border-2 border-dashed border-slate-100 text-slate-300 font-bold">Aranan tarif bulunamadı şefim.</div>}
                             </div>
                         </>
                     )}
 
                     {viewingRecipe && (
-                        <div className="bg-white rounded-[2.5rem] p-8 md:p-12 shadow-sm border border-slate-100">
-                            <button onClick={() => setViewingRecipe(null)} className="text-orange-500 font-black mb-8 block">← GERİ DÖN</button>
-                            <h2 className="text-4xl font-black mb-10">{viewingRecipe.title}</h2>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                                <div>
-                                    <h4 className="font-black text-slate-800 border-b pb-2 mb-4 uppercase text-xs tracking-widest">📜 MALZEMELER</h4>
-                                    <ul className="space-y-3">
-                                        {viewingRecipe.ingredients.split('\n').filter(l => l.trim()).map((ing, i) => (
-                                            <li key={i} className="flex items-start gap-3 text-slate-600 text-sm">
-                                                <span className="text-orange-500 mt-1">•</span> {ing}
-                                            </li>
-                                        ))}
-                                    </ul>
+                        <div className="bg-white rounded-[3rem] p-8 md:p-12 border border-slate-100 shadow-sm animate-in slide-in-from-bottom-6 duration-500">
+                            <div className="flex flex-col md:flex-row justify-between items-start gap-4 mb-8">
+                                <button onClick={() => setViewingRecipe(null)} className="text-orange-500 font-black flex items-center gap-2 hover:-translate-x-1 transition-transform uppercase text-xs tracking-widest"><SimpleIcon type="back" /> GERİ DÖN</button>
+                                <div className="flex gap-2 w-full md:w-auto">
+                                    <button onClick={() => startEditing(viewingRecipe)} className="flex-1 md:flex-none bg-slate-900 text-white px-6 py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg hover:bg-slate-800 transition-all">
+                                        <SimpleIcon type="edit" /> DÜZENLE
+                                    </button>
+                                    {viewingRecipe.link && (
+                                        <a href={viewingRecipe.link} target="_blank" rel="noopener noreferrer" className="flex-1 md:flex-none bg-blue-500 text-white px-6 py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg hover:bg-blue-600 transition-all">
+                                            <SimpleIcon type="play" /> İZLE
+                                        </a>
+                                    )}
                                 </div>
-                                <div>
-                                    <h4 className="font-black text-slate-800 border-b pb-2 mb-4 uppercase text-xs tracking-widest">📖 HAZIRLANIŞI</h4>
-                                    <p className="text-slate-600 whitespace-pre-wrap text-sm leading-relaxed">{viewingRecipe.instructions}</p>
+                            </div>
+                            <div className="flex justify-between items-start mb-4">
+                                <span className="text-[10px] font-black text-orange-500 bg-orange-50 px-3 py-1.5 rounded-xl uppercase tracking-widest">{viewingRecipe.category}</span>
+                                <button onClick={() => deleteRecipeAction(viewingRecipe.id)} className="text-red-300 hover:text-red-500 transition-colors p-2"><SimpleIcon type="trash" /></button>
+                            </div>
+                            <h2 className="text-4xl font-black text-slate-900 mb-8 leading-tight">{viewingRecipe.title}</h2>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                                <div className="space-y-6">
+                                    <h4 className="font-black text-slate-800 flex items-center gap-3 border-b border-slate-100 pb-3 uppercase text-xs tracking-[0.2em]"><SimpleIcon type="list" /> MALZEMELER</h4>
+                                    <div className="bg-slate-50 p-6 rounded-[2rem]">
+                                        <ul className="space-y-3">
+                                            {(viewingRecipe.ingredients || '').split('\n').filter(line => line.trim() !== '').map((item, idx) => (
+                                                <li key={idx} className="flex items-start gap-3 text-slate-600 text-sm leading-relaxed">
+                                                    <span className="text-orange-400 mt-1"><SimpleIcon type="dot" /></span>
+                                                    {item.trim()}
+                                                </li>
+                                            ))}
+                                            {!viewingRecipe.ingredients && <li className="text-slate-400 italic text-sm">Malzeme listesi boş.</li>}
+                                        </ul>
+                                    </div>
+                                </div>
+                                <div className="space-y-6">
+                                    <h4 className="font-black text-slate-800 flex items-center gap-3 border-b border-slate-100 pb-3 uppercase text-xs tracking-[0.2em]"><SimpleIcon type="book" /> HAZIRLANIŞI</h4>
+                                    <p className="text-slate-600 whitespace-pre-wrap leading-relaxed text-base">{viewingRecipe.instructions || 'Hazırlanış detayı girilmemiş.'}</p>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {isAddingNew && (
-                        <div className="bg-white rounded-[2.5rem] p-8 md:p-12 shadow-2xl">
+                    {(isAddingNew || isEditing) && (
+                        <div className="bg-white rounded-[3rem] p-8 md:p-12 border border-slate-100 shadow-2xl animate-in slide-in-from-bottom-8">
                             <div className="flex justify-between items-center mb-10">
-                                <h2 className="text-2xl font-black italic">YENİ <span className="text-orange-500">TARİF</span></h2>
-                                <button onClick={() => setIsAddingNew(false)} className="bg-slate-50 p-3 rounded-full">✕</button>
+                                <h2 className="text-2xl font-black italic uppercase tracking-wider">{isEditing ? 'TARİFİ' : 'YENİ'} <span className="text-orange-500">{isEditing ? 'DÜZENLE' : 'TARİF'}</span></h2>
+                                <button onClick={() => { setIsAddingNew(false); setIsEditing(false); setEditingId(null); }} className="bg-slate-50 p-3 rounded-full"><SimpleIcon type="x" /></button>
                             </div>
                             <form onSubmit={saveRecipe} className="space-y-6">
-                                <div className="flex gap-2">
-                                    <input 
-                                        className="flex-1 p-5 bg-slate-50 rounded-2xl outline-none font-bold" 
-                                        placeholder="Yemek Adı" 
-                                        value={formData.title}
-                                        onChange={e => setFormData({...formData, title: e.target.value})}
-                                    />
-                                    <button 
-                                        type="button" 
-                                        onClick={generateWithAI} 
-                                        disabled={aiLoading}
-                                        className="bg-purple-600 text-white px-6 rounded-2xl font-black text-xs hover:bg-purple-700 disabled:opacity-50"
-                                    >
-                                        {aiLoading ? "✨..." : "AI SİHRİ"}
-                                    </button>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Yemek Adı</label>
+                                    <div className="flex gap-2">
+                                        <input value={formTitle} onChange={(e) => setFormTitle(e.target.value)} className="flex-1 bg-slate-50 p-5 rounded-2xl border-none outline-none font-bold text-lg focus:ring-2 ring-orange-100 transition-all" placeholder="Örn: Lazanya" required />
+                                        <button type="button" onClick={generateAiRecipe} disabled={aiLoading} className="bg-purple-600 text-white px-6 rounded-2xl font-black text-xs shadow-lg hover:bg-purple-700 disabled:opacity-50 transition-all flex items-center gap-2">
+                                            {aiLoading ? "✨..." : <><SimpleIcon type="magic" /> AI SİHRİ</>}
+                                        </button>
+                                    </div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <select 
-                                        className="p-5 bg-slate-50 rounded-2xl font-bold outline-none"
-                                        value={formData.category}
-                                        onChange={e => setFormData({...formData, category: e.target.value})}
-                                    >
-                                        {categories.filter(c => c !== 'Hepsi').map(c => <option key={c} value={c}>{c}</option>)}
-                                    </select>
-                                    <input 
-                                        className="p-5 bg-slate-50 rounded-2xl font-bold outline-none" 
-                                        placeholder="Süre (DK)" 
-                                        value={formData.prepTime}
-                                        onChange={e => setFormData({...formData, prepTime: e.target.value})}
-                                    />
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Kategori</label>
+                                        <select value={formCategory} onChange={(e) => setFormCategory(e.target.value)} className="w-full bg-slate-50 p-5 rounded-2xl font-bold outline-none appearance-none">
+                                            {categories.filter(c => c !== 'Hepsi').map(c => <option key={c} value={c}>{c}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Süre (Dakika)</label>
+                                        <input value={formPrepTime} onChange={(e) => setFormPrepTime(e.target.value)} className="w-full bg-slate-50 p-5 rounded-2xl font-bold outline-none" placeholder="Örn: 30" />
+                                    </div>
                                 </div>
-                                <div>
-                                    <label className="text-[10px] font-black text-slate-400 uppercase ml-4">Malzemeler (Her Satıra Bir Tane)</label>
-                                    <textarea 
-                                        className="w-full p-5 bg-slate-50 rounded-2xl h-40 outline-none font-bold mt-1" 
-                                        placeholder="1 Bardak Su&#10;2 Kaşık Un..."
-                                        value={formData.ingredients}
-                                        onChange={e => setFormData({...formData, ingredients: e.target.value})}
-                                    />
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Video / Kaynak Linki</label>
+                                    <input value={formLink} onChange={(e) => setFormLink(e.target.value)} className="w-full bg-slate-50 p-5 rounded-2xl border-none outline-none font-bold text-sm focus:ring-2 ring-blue-100 transition-all" placeholder="Youtube linki vb." />
                                 </div>
-                                <textarea 
-                                    className="w-full p-5 bg-slate-50 rounded-2xl h-40 outline-none font-bold" 
-                                    placeholder="Nasıl Hazırlanır?"
-                                    value={formData.instructions}
-                                    onChange={e => setFormData({...formData, instructions: e.target.value})}
-                                />
-                                <button type="submit" className="w-full bg-orange-500 text-white p-6 rounded-3xl font-black text-xl shadow-xl hover:bg-orange-600 active:scale-95 transition-all">KAYDET</button>
+                                <div className={`space-y-2 relative ${aiLoading ? 'shimmer rounded-2xl' : ''}`}>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Malzemeler (Her Satıra Bir Tane)</label>
+                                    <textarea value={formIngredients} onChange={(e) => setFormIngredients(e.target.value)} className="w-full bg-slate-50 p-5 rounded-2xl h-48 font-bold outline-none focus:ring-2 ring-orange-100 transition-all" placeholder="2 Adet Yumurta&#10;1 Bardak Süt&#10;..."></textarea>
+                                </div>
+                                <div className={`space-y-2 relative ${aiLoading ? 'shimmer rounded-2xl' : ''}`}>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Hazırlanışı</label>
+                                    <textarea value={formInstructions} onChange={(e) => setFormInstructions(e.target.value)} className="w-full bg-slate-50 p-5 rounded-2xl h-48 font-bold outline-none focus:ring-2 ring-orange-100 transition-all" placeholder="Adım adım tarif..."></textarea>
+                                </div>
+                                <button type="submit" className="w-full bg-orange-500 text-white p-6 rounded-3xl font-black text-xl shadow-xl hover:bg-orange-600 active:scale-95 transition-all mt-4 uppercase tracking-wider">
+                                    {isEditing ? 'DEĞİŞİKLİKLERİ KAYDET' : 'DEFTERE KAYDET'}
+                                </button>
                             </form>
                         </div>
                     )}
