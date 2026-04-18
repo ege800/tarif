@@ -1,339 +1,380 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lezzet Defterim - Koleksiyon</title>
-    
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<!doctype html>
+<html lang="tr" class="h-full">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Online Tarif Defteri</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.263.0/dist/umd/lucide.min.js"></script>
+  <script src="/_sdk/element_sdk.js"></script>
+  <script src="/_sdk/data_sdk.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&amp;family=DM+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <style>
+    .recipe-card { transition: transform 0.2s, box-shadow 0.2s; }
+    .recipe-card:hover { transform: translateY(-3px); }
+    .fade-in { animation: fadeIn 0.4s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .modal-overlay { animation: overlayIn 0.2s ease; }
+    @keyframes overlayIn { from { opacity: 0; } to { opacity: 1; } }
+    textarea, input, select { font-family: 'DM Sans', sans-serif; }
+  </style>
+  <style>body { box-sizing: border-box; }</style>
+ </head>
+ <body class="h-full">
+  <div id="app" class="h-full w-full overflow-auto" style="background-color: #faf7f2; font-family: 'DM Sans', sans-serif;"><!-- Header -->
+   <header class="relative overflow-hidden" style="background: linear-gradient(135deg, #2d2016 0%, #5c3d2e 100%);">
+    <div class="absolute inset-0 opacity-10" style="background-image: radial-gradient(circle at 20% 50%, #f5e6d3 1px, transparent 1px), radial-gradient(circle at 80% 20%, #f5e6d3 1px, transparent 1px); background-size: 60px 60px;"></div>
+    <div class="relative max-w-5xl mx-auto px-6 py-10 text-center">
+     <h1 id="el-title" class="text-4xl md:text-5xl font-bold mb-2" style="font-family: 'Playfair Display', serif; color: #f5e6d3;">Tarif Defterim</h1>
+     <p id="el-subtitle" class="text-lg opacity-80" style="color: #f5e6d3;">Lezzetli tariflerinizi kaydedin</p>
+    </div>
+   </header><!-- Controls -->
+   <div class="max-w-5xl mx-auto px-6 pt-6 flex flex-wrap gap-3 items-center justify-between">
+    <div class="flex gap-2 flex-wrap" id="filter-buttons"><button onclick="setFilter('all')" class="filter-btn px-4 py-2 rounded-full text-sm font-medium transition-colors" style="background:#5c3d2e; color:#f5e6d3;">Tümü</button> <button onclick="setFilter('Ana Yemek')" class="filter-btn px-4 py-2 rounded-full text-sm font-medium transition-colors" style="background:#e8ddd0; color:#5c3d2e;">Ana Yemek</button> <button onclick="setFilter('Çorba')" class="filter-btn px-4 py-2 rounded-full text-sm font-medium transition-colors" style="background:#e8ddd0; color:#5c3d2e;">Çorba</button> <button onclick="setFilter('Tatlı')" class="filter-btn px-4 py-2 rounded-full text-sm font-medium transition-colors" style="background:#e8ddd0; color:#5c3d2e;">Tatlı</button> <button onclick="setFilter('Salata')" class="filter-btn px-4 py-2 rounded-full text-sm font-medium transition-colors" style="background:#e8ddd0; color:#5c3d2e;">Salata</button> <button onclick="setFilter('Diğer')" class="filter-btn px-4 py-2 rounded-full text-sm font-medium transition-colors" style="background:#e8ddd0; color:#5c3d2e;">Diğer</button>
+    </div><button onclick="openAddModal()" class="flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-colors" style="background:#c0593a; color:#fff;"> <i data-lucide="plus" style="width:18px;height:18px;"></i> Yeni Tarif </button>
+   </div><!-- Recipe Grid -->
+   <div id="recipe-grid" class="max-w-5xl mx-auto px-6 py-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+   </div><!-- Empty State -->
+   <div id="empty-state" class="max-w-5xl mx-auto px-6 py-16 text-center hidden">
+    <div class="text-6xl mb-4">
+     📖
+    </div>
+    <p class="text-xl font-semibold" style="color:#5c3d2e;">Henüz tarif eklenmemiş</p>
+    <p class="mt-2 opacity-60" style="color:#5c3d2e;">"Yeni Tarif" butonuna tıklayarak başlayın</p>
+   </div><!-- Toast -->
+   <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 px-5 py-3 rounded-xl text-sm font-medium shadow-lg transition-all duration-300 opacity-0 pointer-events-none" style="background:#2d2016; color:#f5e6d3; z-index:100;"></div><!-- Add/Edit Modal -->
+   <div id="modal" class="fixed inset-0 hidden" style="z-index:50;">
+    <div class="absolute inset-0 bg-black/50 modal-overlay" onclick="closeModal()"></div>
+    <div class="relative mx-auto mt-8 max-w-lg w-full mx-4 rounded-2xl shadow-2xl max-h-[90%] overflow-auto fade-in" style="background:#fff;">
+     <div class="flex items-center justify-between p-5 border-b" style="border-color:#e8ddd0;">
+      <h2 id="modal-title" class="text-xl font-bold" style="font-family:'Playfair Display',serif; color:#2d2016;">Yeni Tarif Ekle</h2><button onclick="closeModal()" class="p-1 rounded-lg hover:bg-gray-100"><i data-lucide="x" style="width:20px;height:20px;color:#5c3d2e;"></i></button>
+     </div>
+     <form id="recipe-form" class="p-5 space-y-4" onsubmit="handleSubmit(event)">
+      <div><label for="f-name" class="block text-sm font-medium mb-1" style="color:#5c3d2e;">Tarif Adı *</label> <input id="f-name" required class="w-full px-3 py-2.5 rounded-lg border text-sm" style="border-color:#e8ddd0;" placeholder="Örn: Karnıyarık">
+      </div>
+      <div class="grid grid-cols-3 gap-3">
+       <div><label for="f-category" class="block text-sm font-medium mb-1" style="color:#5c3d2e;">Kategori</label> <select id="f-category" class="w-full px-3 py-2.5 rounded-lg border text-sm" style="border-color:#e8ddd0;"> <option>Ana Yemek</option><option>Çorba</option><option>Tatlı</option><option>Salata</option><option>Diğer</option> </select>
+       </div>
+       <div><label for="f-time" class="block text-sm font-medium mb-1" style="color:#5c3d2e;">Süre</label> <input id="f-time" class="w-full px-3 py-2.5 rounded-lg border text-sm" style="border-color:#e8ddd0;" placeholder="45 dk">
+       </div>
+       <div><label for="f-servings" class="block text-sm font-medium mb-1" style="color:#5c3d2e;">Porsiyon</label> <input id="f-servings" class="w-full px-3 py-2.5 rounded-lg border text-sm" style="border-color:#e8ddd0;" placeholder="4 kişi">
+       </div>
+      </div>
+      <div><label for="f-ingredients" class="block text-sm font-medium mb-1" style="color:#5c3d2e;">Malzemeler *</label> <textarea id="f-ingredients" required rows="4" class="w-full px-3 py-2.5 rounded-lg border text-sm" style="border-color:#e8ddd0;" placeholder="Her satıra bir malzeme yazın"></textarea>
+      </div>
+      <div><label for="f-instructions" class="block text-sm font-medium mb-1" style="color:#5c3d2e;">Yapılışı *</label> <textarea id="f-instructions" required rows="4" class="w-full px-3 py-2.5 rounded-lg border text-sm" style="border-color:#e8ddd0;" placeholder="Adım adım tarifi yazın"></textarea>
+      </div><button type="submit" id="submit-btn" class="w-full py-3 rounded-xl font-semibold text-sm transition-colors" style="background:#c0593a; color:#fff;"> Tarifi Kaydet </button>
+     </form>
+    </div>
+   </div><!-- Detail Modal -->
+   <div id="detail-modal" class="fixed inset-0 hidden" style="z-index:50;">
+    <div class="absolute inset-0 bg-black/50 modal-overlay" onclick="closeDetail()"></div>
+    <div class="relative mx-auto mt-8 max-w-lg w-full mx-4 rounded-2xl shadow-2xl max-h-[90%] overflow-auto fade-in" style="background:#fff;">
+     <div id="detail-content" class="p-6"></div>
+    </div>
+   </div><!-- Delete Confirm -->
+   <div id="delete-confirm" class="fixed inset-0 hidden" style="z-index:60;">
+    <div class="absolute inset-0 bg-black/50 modal-overlay"></div>
+    <div class="relative mx-auto mt-32 max-w-sm w-full mx-4 rounded-2xl shadow-2xl p-6 text-center fade-in" style="background:#fff;">
+     <div class="text-4xl mb-3">
+      🗑️
+     </div>
+     <p class="font-semibold text-lg mb-1" style="color:#2d2016;">Tarifi silmek istediğinize emin misiniz?</p>
+     <p class="text-sm mb-5 opacity-60" style="color:#5c3d2e;">Bu işlem geri alınamaz.</p>
+     <div class="flex gap-3"><button onclick="cancelDelete()" class="flex-1 py-2.5 rounded-xl font-medium text-sm" style="background:#e8ddd0; color:#5c3d2e;">Vazgeç</button> <button onclick="confirmDelete()" id="delete-btn" class="flex-1 py-2.5 rounded-xl font-medium text-sm" style="background:#c0593a; color:#fff;">Sil</button>
+     </div>
+    </div>
+   </div>
+  </div>
+  <script>
+  const categoryEmojis = { 'Ana Yemek': '🍖', 'Çorba': '🍲', 'Tatlı': '🍰', 'Salata': '🥗', 'Diğer': '🍽️' };
+  let allRecipes = [];
+  let currentFilter = 'all';
+  let editingRecipe = null;
+  let deletingRecipe = null;
 
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
-        body { 
-            font-family: 'Plus Jakarta Sans', sans-serif; 
-            background-color: #f8fafc; 
-            margin: 0;
-            -webkit-tap-highlight-color: transparent;
+  const defaultConfig = {
+    app_title: 'Tarif Defterim',
+    subtitle_text: 'Lezzetli tariflerinizi kaydedin',
+    background_color: '#faf7f2',
+    surface_color: '#ffffff',
+    text_color: '#2d2016',
+    primary_color: '#c0593a',
+    secondary_color: '#5c3d2e',
+    font_family: 'Playfair Display',
+    font_size: 16
+  };
+
+  window.elementSdk.init({
+    defaultConfig,
+    onConfigChange: async (config) => {
+      const c = { ...defaultConfig, ...config };
+      document.getElementById('app').style.backgroundColor = c.background_color;
+      document.getElementById('el-title').textContent = c.app_title;
+      document.getElementById('el-title').style.fontFamily = `${c.font_family}, Playfair Display, serif`;
+      document.getElementById('el-subtitle').textContent = c.subtitle_text;
+
+      // Apply colors
+      document.querySelectorAll('.recipe-card').forEach(card => {
+        card.style.backgroundColor = c.surface_color;
+        card.querySelector('.card-title').style.color = c.text_color;
+      });
+      document.querySelectorAll('.filter-btn').forEach(btn => {
+        if (btn.dataset.active === 'true') {
+          btn.style.backgroundColor = c.secondary_color;
         }
-        .recipe-card { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; }
-        .recipe-card:hover { transform: translateY(-4px); box-shadow: 0 15px 30px -5px rgba(0, 0, 0, 0.1); }
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        .fade-in { animation: fadeIn 0.4s ease-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-    </style>
-</head>
-<body>
-    <div id="root"></div>
+      });
+      const addBtn = document.querySelector('[onclick="openAddModal()"]');
+      if (addBtn) addBtn.style.backgroundColor = c.primary_color;
+      document.getElementById('submit-btn').style.backgroundColor = c.primary_color;
+    },
+    mapToCapabilities: (config) => {
+      const c = { ...defaultConfig, ...config };
+      const makeColor = (key) => ({
+        get: () => c[key] || defaultConfig[key],
+        set: (v) => { c[key] = v; window.elementSdk.setConfig({ [key]: v }); }
+      });
+      return {
+        recolorables: [
+          makeColor('background_color'),
+          makeColor('surface_color'),
+          makeColor('text_color'),
+          makeColor('primary_color'),
+          makeColor('secondary_color')
+        ],
+        borderables: [],
+        fontEditable: {
+          get: () => c.font_family || defaultConfig.font_family,
+          set: (v) => { c.font_family = v; window.elementSdk.setConfig({ font_family: v }); }
+        },
+        fontSizeable: {
+          get: () => c.font_size || defaultConfig.font_size,
+          set: (v) => { c.font_size = v; window.elementSdk.setConfig({ font_size: v }); }
+        }
+      };
+    },
+    mapToEditPanelValues: (config) => {
+      const c = { ...defaultConfig, ...config };
+      return new Map([
+        ['app_title', c.app_title],
+        ['subtitle_text', c.subtitle_text]
+      ]);
+    }
+  });
 
-    <!-- Firebase SDK Modülleri -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, query, doc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+  // Data SDK
+  const dataHandler = {
+    onDataChanged(data) {
+      allRecipes = data;
+      renderRecipes();
+    }
+  };
+  (async () => {
+    const r = await window.dataSdk.init(dataHandler);
+    if (!r.isOk) console.error('Data SDK init failed');
+  })();
 
-        // Global erişim için window objesine bağlayalım (Babel scripti için)
-        window.fb = { initializeApp, getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, getFirestore, collection, addDoc, onSnapshot, query, doc, updateDoc };
-    </script>
+  function renderRecipes() {
+    const grid = document.getElementById('recipe-grid');
+    const empty = document.getElementById('empty-state');
+    const filtered = currentFilter === 'all' ? allRecipes : allRecipes.filter(r => r.category === currentFilter);
 
-    <script type="text/babel">
-        const { useState, useMemo, useEffect } = React;
-        
-        // Window objesine bağladığımız Firebase fonksiyonlarını alalım
-        const { initializeApp, getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, getFirestore, collection, addDoc, onSnapshot, query, doc, updateDoc } = window.fb;
+    if (filtered.length === 0) {
+      grid.innerHTML = '';
+      empty.classList.remove('hidden');
+      return;
+    }
+    empty.classList.add('hidden');
 
-        // Firebase Yapılandırması
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+    const existing = new Map([...grid.children].map(el => [el.dataset.id, el]));
+    const newIds = new Set(filtered.map(r => r.__backendId));
 
-        const DEFAULT_RECIPES = [
-            {
-                id: "default-1",
-                title: "Anne Köftesi",
-                category: "Ana Yemekler",
-                prepTime: "30",
-                ingredients: "500gr Kıyma\n1 adet Soğan\n1 adet Yumurta\nYarım demet Maydanoz\nGaleta unu, Tuz, Karabiber, Kimyon",
-                instructions: "1. Soğanı rendeleyin ve suyunu sıkın.\n2. Tüm malzemeleri yoğurun.\n3. Şekil verip kızartın.",
-                isFavorite: true,
-                link: "https://youtube.com",
-                linkText: "Videolu Anlatım"
-            }
-        ];
+    existing.forEach((el, id) => { if (!newIds.has(id)) el.remove(); });
 
-        const SimpleIcon = ({ type, active }) => {
-            const icons = {
-                search: "🔍", heart: active ? "❤️" : "🤍", 
-                clock: "🕒", chef: "👨‍🍳", 
-                book: "📖", x: "❌", list: "📜", link: "🔗", plus: "➕", check: "✅"
-            };
-            return <span className={`inline-block ${active ? 'scale-110' : ''}`}>{icons[type]}</span>;
-        };
+    filtered.forEach(recipe => {
+      const id = recipe.__backendId;
+      if (existing.has(id)) {
+        updateCard(existing.get(id), recipe);
+      } else {
+        grid.appendChild(createCard(recipe));
+      }
+    });
+  }
 
-        const App = () => {
-            const [user, setUser] = useState(null);
-            const [recipes, setRecipes] = useState(DEFAULT_RECIPES);
-            const [searchTerm, setSearchTerm] = useState('');
-            const [selectedCategory, setSelectedCategory] = useState('Hepsi');
-            const [viewingRecipe, setViewingRecipe] = useState(null);
-            const [showFavsOnly, setShowFavsOnly] = useState(false);
-            const [isAddMode, setIsAddMode] = useState(false);
-            const [loading, setLoading] = useState(true);
+  function createCard(r) {
+    const div = document.createElement('div');
+    div.className = 'recipe-card rounded-2xl p-5 cursor-pointer shadow-sm fade-in';
+    div.style.backgroundColor = '#fff';
+    div.dataset.id = r.__backendId;
+    div.onclick = () => openDetail(r.__backendId);
+    updateCardInner(div, r);
+    return div;
+  }
 
-            const [formData, setFormData] = useState({
-                title: '', category: 'Ana Yemekler', prepTime: '', ingredients: '', instructions: '', link: '', linkText: ''
-            });
+  function updateCard(div, r) {
+    div.onclick = () => openDetail(r.__backendId);
+    updateCardInner(div, r);
+  }
 
-            useEffect(() => {
-                const initAuth = async () => {
-                    try {
-                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                            await signInWithCustomToken(auth, __initial_auth_token);
-                        } else {
-                            await signInAnonymously(auth);
-                        }
-                    } catch (error) {
-                        console.error("Kimlik doğrulama hatası:", error);
-                    }
-                };
-                initAuth();
-                const unsubscribe = onAuthStateChanged(auth, (u) => {
-                    setUser(u);
-                });
-                return () => unsubscribe();
-            }, []);
+  function updateCardInner(div, r) {
+    const emoji = categoryEmojis[r.category] || '🍽️';
+    div.innerHTML = `
+      <div class="flex items-start justify-between mb-3">
+        <span class="text-3xl">${emoji}</span>
+        <span class="text-xs font-medium px-2.5 py-1 rounded-full" style="background:#e8ddd0; color:#5c3d2e;">${r.category || 'Diğer'}</span>
+      </div>
+      <h3 class="card-title font-bold text-lg mb-2" style="font-family:'Playfair Display',serif; color:#2d2016;">${esc(r.name)}</h3>
+      <div class="flex gap-3 text-xs opacity-60" style="color:#5c3d2e;">
+        ${r.prep_time ? `<span>⏱ ${esc(r.prep_time)}</span>` : ''}
+        ${r.servings ? `<span>👥 ${esc(r.servings)}</span>` : ''}
+      </div>
+    `;
+  }
 
-            useEffect(() => {
-                if (!user) return;
+  function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 
-                const recipesCollection = collection(db, 'artifacts', appId, 'public', 'data', 'recipes');
-                
-                const unsubscribe = onSnapshot(recipesCollection, (snapshot) => {
-                    const cloudRecipes = snapshot.docs.map(doc => ({
-                        ...doc.data(),
-                        id: doc.id,
-                        isCloud: true
-                    }));
-                    
-                    setRecipes([...DEFAULT_RECIPES, ...cloudRecipes]);
-                    setLoading(false);
-                }, (error) => {
-                    console.error("Senkronizasyon hatası:", error);
-                    setLoading(false);
-                });
+  function setFilter(f) {
+    currentFilter = f;
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+      const isActive = (f === 'all' && btn.textContent === 'Tümü') || btn.textContent === f;
+      btn.style.backgroundColor = isActive ? '#5c3d2e' : '#e8ddd0';
+      btn.style.color = isActive ? '#f5e6d3' : '#5c3d2e';
+      btn.dataset.active = isActive;
+    });
+    renderRecipes();
+  }
 
-                return () => unsubscribe();
-            }, [user]);
+  function openAddModal() {
+    editingRecipe = null;
+    document.getElementById('modal-title').textContent = 'Yeni Tarif Ekle';
+    document.getElementById('submit-btn').textContent = 'Tarifi Kaydet';
+    document.getElementById('recipe-form').reset();
+    document.getElementById('modal').classList.remove('hidden');
+  }
 
-            const toggleFavorite = async (e, recipe) => {
-                e.stopPropagation();
-                if (recipe.isCloud) {
-                    const recipeRef = doc(db, 'artifacts', appId, 'public', 'data', 'recipes', recipe.id);
-                    await updateDoc(recipeRef, { isFavorite: !recipe.isFavorite });
-                } else {
-                    setRecipes(prev => prev.map(r => 
-                        r.id === recipe.id ? { ...r, isFavorite: !r.isFavorite } : r
-                    ));
-                }
-            };
+  function openEditModal(id) {
+    const r = allRecipes.find(x => x.__backendId === id);
+    if (!r) return;
+    editingRecipe = r;
+    document.getElementById('modal-title').textContent = 'Tarifi Düzenle';
+    document.getElementById('submit-btn').textContent = 'Güncelle';
+    document.getElementById('f-name').value = r.name || '';
+    document.getElementById('f-category').value = r.category || 'Ana Yemek';
+    document.getElementById('f-time').value = r.prep_time || '';
+    document.getElementById('f-servings').value = r.servings || '';
+    document.getElementById('f-ingredients').value = r.ingredients || '';
+    document.getElementById('f-instructions').value = r.instructions || '';
+    closeDetail();
+    document.getElementById('modal').classList.remove('hidden');
+  }
 
-            const handleAddNewRecipe = async (e) => {
-                e.preventDefault();
-                if (!user) return;
+  function closeModal() { document.getElementById('modal').classList.remove('hidden'); document.getElementById('modal').classList.add('hidden'); }
 
-                try {
-                    const recipesCollection = collection(db, 'artifacts', appId, 'public', 'data', 'recipes');
-                    await addDoc(recipesCollection, {
-                        ...formData,
-                        createdAt: new Date().toISOString(),
-                        isFavorite: false,
-                        createdBy: user.uid
-                    });
+  async function handleSubmit(e) {
+    e.preventDefault();
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true; btn.textContent = 'Kaydediliyor...';
 
-                    setFormData({ title: '', category: 'Ana Yemekler', prepTime: '', ingredients: '', instructions: '', link: '', linkText: '' });
-                    setIsAddMode(false);
-                } catch (error) {
-                    console.error(error);
-                    alert("Tarif eklenirken bir hata oluştu.");
-                }
-            };
+    const data = {
+      name: document.getElementById('f-name').value.trim(),
+      category: document.getElementById('f-category').value,
+      prep_time: document.getElementById('f-time').value.trim(),
+      servings: document.getElementById('f-servings').value.trim(),
+      ingredients: document.getElementById('f-ingredients').value.trim(),
+      instructions: document.getElementById('f-instructions').value.trim(),
+      created_at: new Date().toISOString()
+    };
 
-            const filtered = useMemo(() => {
-                return recipes.filter(r => {
-                    const mSearch = r.title.toLowerCase().includes(searchTerm.toLowerCase());
-                    const mCat = selectedCategory === 'Hepsi' || r.category === selectedCategory;
-                    const mFav = showFavsOnly ? r.isFavorite : true;
-                    return mSearch && mCat && mFav;
-                });
-            }, [recipes, searchTerm, selectedCategory, showFavsOnly]);
+    let result;
+    if (editingRecipe) {
+      result = await window.dataSdk.update({ ...editingRecipe, ...data });
+    } else {
+      if (allRecipes.length >= 999) {
+        showToast('⚠️ Maksimum 999 tarif sınırına ulaşıldı!');
+        btn.disabled = false; btn.textContent = 'Tarifi Kaydet';
+        return;
+      }
+      result = await window.dataSdk.create(data);
+    }
 
-            return (
-                <div className="max-w-4xl mx-auto p-6 pb-24">
-                    <header className="flex justify-between items-center mb-12">
-                        <div className="flex items-center gap-4">
-                            <div className="text-3xl bg-white w-14 h-14 flex items-center justify-center rounded-2xl shadow-sm border border-slate-100">
-                                <SimpleIcon type="chef" />
-                            </div>
-                            <div>
-                                <h1 className="text-xl font-black italic tracking-tighter uppercase leading-none text-slate-900">LEZZET<span className="text-orange-500">DEFTERİM</span></h1>
-                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">Paylaşımlı Mutfak</p>
-                            </div>
-                        </div>
-                        <button 
-                            onClick={() => { setIsAddMode(!isAddMode); setViewingRecipe(null); }}
-                            className={`px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center gap-2 ${isAddMode ? 'bg-slate-200 text-slate-600' : 'bg-orange-500 text-white shadow-lg shadow-orange-100'}`}
-                        >
-                            <SimpleIcon type={isAddMode ? 'x' : 'plus'} /> {isAddMode ? 'VAZGEÇ' : 'YENİ TARİF'}
-                        </button>
-                    </header>
+    btn.disabled = false;
+    btn.textContent = editingRecipe ? 'Güncelle' : 'Tarifi Kaydet';
 
-                    {!viewingRecipe && !isAddMode && (
-                        <div className="fade-in">
-                            <div className="relative mb-8">
-                                <input 
-                                    className="w-full p-6 pl-14 rounded-[2rem] bg-white shadow-sm border border-slate-100 outline-none font-bold text-slate-700 focus:ring-2 ring-orange-100 transition-all" 
-                                    placeholder="Tarif ara..." 
-                                    value={searchTerm} 
-                                    onChange={e => setSearchTerm(e.target.value)} 
-                                />
-                                <div className="absolute left-6 top-1/2 -translate-y-1/2 opacity-30"><SimpleIcon type="search" /></div>
-                            </div>
+    if (result.isOk) {
+      showToast(editingRecipe ? '✅ Tarif güncellendi!' : '✅ Tarif eklendi!');
+      closeModal();
+    } else {
+      showToast('❌ Bir hata oluştu, tekrar deneyin.');
+    }
+  }
 
-                            <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar mb-8">
-                                {['Hepsi', 'Ana Yemekler', 'Tatlılar', 'Hamur İşleri', 'Çorbalar'].map(c => (
-                                    <button 
-                                        key={c} 
-                                        onClick={() => {setSelectedCategory(c); setShowFavsOnly(false);}} 
-                                        className={`px-6 py-3 rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all border-2 whitespace-nowrap ${selectedCategory === c && !showFavsOnly ? 'bg-slate-900 border-slate-900 text-white shadow-lg' : 'bg-white border-slate-100 text-slate-400 hover:border-orange-200'}`}
-                                    >
-                                        {c}
-                                    </button>
-                                ))}
-                                <button 
-                                    onClick={() => setShowFavsOnly(!showFavsOnly)}
-                                    className={`px-6 py-3 rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all border-2 whitespace-nowrap ${showFavsOnly ? 'bg-red-500 border-red-500 text-white shadow-lg' : 'bg-white border-slate-100 text-red-400 hover:border-red-200'}`}
-                                >
-                                    <SimpleIcon type="heart" active={showFavsOnly} /> FAVORİLER
-                                </button>
-                            </div>
+  function openDetail(id) {
+    const r = allRecipes.find(x => x.__backendId === id);
+    if (!r) return;
+    const emoji = categoryEmojis[r.category] || '🍽️';
+    document.getElementById('detail-content').innerHTML = `
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-3">
+          <span class="text-4xl">${emoji}</span>
+          <div>
+            <h2 class="text-2xl font-bold" style="font-family:'Playfair Display',serif; color:#2d2016;">${esc(r.name)}</h2>
+            <span class="text-xs font-medium px-2.5 py-1 rounded-full" style="background:#e8ddd0; color:#5c3d2e;">${r.category}</span>
+          </div>
+        </div>
+        <button onclick="closeDetail()" class="p-1 rounded-lg hover:bg-gray-100"><i data-lucide="x" style="width:20px;height:20px;color:#5c3d2e;"></i></button>
+      </div>
+      <div class="flex gap-4 mb-5 text-sm" style="color:#5c3d2e;">
+        ${r.prep_time ? `<span>⏱ ${esc(r.prep_time)}</span>` : ''}
+        ${r.servings ? `<span>👥 ${esc(r.servings)}</span>` : ''}
+      </div>
+      <div class="mb-5">
+        <h3 class="font-bold text-sm mb-2" style="color:#5c3d2e;">📝 Malzemeler</h3>
+        <div class="rounded-xl p-4 text-sm whitespace-pre-line" style="background:#faf7f2; color:#2d2016;">${esc(r.ingredients)}</div>
+      </div>
+      <div class="mb-5">
+        <h3 class="font-bold text-sm mb-2" style="color:#5c3d2e;">👩‍🍳 Yapılışı</h3>
+        <div class="rounded-xl p-4 text-sm whitespace-pre-line" style="background:#faf7f2; color:#2d2016;">${esc(r.instructions)}</div>
+      </div>
+      <div class="flex gap-3">
+        <button onclick="openEditModal('${r.__backendId}')" class="flex-1 py-2.5 rounded-xl font-medium text-sm flex items-center justify-center gap-2" style="background:#e8ddd0; color:#5c3d2e;">
+          <i data-lucide="edit" style="width:16px;height:16px;"></i> Düzenle
+        </button>
+        <button onclick="askDelete('${r.__backendId}')" class="flex-1 py-2.5 rounded-xl font-medium text-sm flex items-center justify-center gap-2" style="background:#c0593a; color:#fff;">
+          <i data-lucide="trash-2" style="width:16px;height:16px;"></i> Sil
+        </button>
+      </div>
+    `;
+    document.getElementById('detail-modal').classList.remove('hidden');
+    lucide.createIcons();
+  }
 
-                            {loading ? (
-                                <div className="text-center py-20 animate-pulse text-slate-400 font-bold uppercase tracking-widest text-xs">Yükleniyor...</div>
-                            ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    {filtered.map(r => (
-                                        <div key={r.id} onClick={() => setViewingRecipe(r)} className="recipe-card bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative group">
-                                            <div className="flex justify-between items-start mb-6">
-                                                <div className="flex gap-2">
-                                                    <span className="text-[10px] font-black bg-orange-50 text-orange-600 px-4 py-2 rounded-xl uppercase">{r.category}</span>
-                                                    {r.isCloud && <span className="text-[10px] font-black bg-blue-50 text-blue-600 px-4 py-2 rounded-xl uppercase">Ortak</span>}
-                                                </div>
-                                                <button 
-                                                    onClick={(e) => toggleFavorite(e, r)}
-                                                    className="hover:scale-125 transition-transform p-2"
-                                                >
-                                                    <SimpleIcon type="heart" active={r.isFavorite} />
-                                                </button>
-                                            </div>
-                                            <h3 className="text-2xl font-black text-slate-800 mb-8 leading-tight">{r.title}</h3>
-                                            <div className="flex items-center text-[10px] font-black text-slate-400 gap-6 pt-6 border-t border-slate-50">
-                                                <span><SimpleIcon type="clock" /> {r.prepTime} DK</span>
-                                                <span className="ml-auto text-orange-500 uppercase tracking-widest group-hover:translate-x-1 transition-transform">Gör →</span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
+  function closeDetail() { document.getElementById('detail-modal').classList.add('hidden'); }
 
-                    {isAddMode && (
-                        <div className="fade-in bg-white rounded-[3rem] p-10 border border-slate-100 shadow-2xl">
-                            <h2 className="text-3xl font-black mb-10 italic tracking-tight text-slate-900">YENİ TARİF EKLE</h2>
-                            <form onSubmit={handleAddNewRecipe} className="space-y-6">
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 ml-4 uppercase">Yemek İsmi</label>
-                                    <input required placeholder="Örn: Zeytinyağlı Sarma" className="w-full p-5 bg-slate-50 rounded-2xl border-none font-bold text-lg outline-none focus:ring-2 ring-orange-200" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
-                                </div>
-                                <div className="grid grid-cols-2 gap-6">
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 ml-4 uppercase">Kategori</label>
-                                        <select className="w-full p-5 bg-slate-50 rounded-2xl font-bold outline-none" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}>
-                                            <option>Ana Yemekler</option>
-                                            <option>Tatlılar</option>
-                                            <option>Hamur İşleri</option>
-                                            <option>Çorbalar</option>
-                                        </select>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 ml-4 uppercase">Süre (Dk)</label>
-                                        <input required placeholder="45" type="number" className="w-full p-5 bg-slate-50 rounded-2xl font-bold outline-none" value={formData.prepTime} onChange={e => setFormData({...formData, prepTime: e.target.value})} />
-                                    </div>
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 ml-4 uppercase">Malzemeler</label>
-                                    <textarea required placeholder="Her malzemeyi yeni satıra yazın..." className="w-full p-6 bg-slate-50 rounded-[2rem] h-32 font-medium outline-none" value={formData.ingredients} onChange={e => setFormData({...formData, ingredients: e.target.value})} />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 ml-4 uppercase">Nasıl Hazırlanır?</label>
-                                    <textarea required placeholder="Adım adım anlatın..." className="w-full p-6 bg-slate-50 rounded-[2rem] h-48 font-medium outline-none" value={formData.instructions} onChange={e => setFormData({...formData, instructions: e.target.value})} />
-                                </div>
-                                <button type="submit" className="w-full bg-slate-900 text-white p-7 rounded-[2.5rem] font-black text-xl shadow-2xl hover:bg-orange-600 transition-all uppercase tracking-tighter mt-4 flex items-center justify-center gap-3">
-                                    <SimpleIcon type="check" /> HERKES İÇİN EKLE
-                                </button>
-                            </form>
-                        </div>
-                    )}
+  function askDelete(id) {
+    deletingRecipe = allRecipes.find(x => x.__backendId === id);
+    document.getElementById('delete-confirm').classList.remove('hidden');
+  }
+  function cancelDelete() { deletingRecipe = null; document.getElementById('delete-confirm').classList.add('hidden'); }
+  async function confirmDelete() {
+    if (!deletingRecipe) return;
+    const btn = document.getElementById('delete-btn');
+    btn.disabled = true; btn.textContent = 'Siliniyor...';
+    const result = await window.dataSdk.delete(deletingRecipe);
+    btn.disabled = false; btn.textContent = 'Sil';
+    document.getElementById('delete-confirm').classList.add('hidden');
+    closeDetail();
+    showToast(result.isOk ? '🗑️ Tarif silindi.' : '❌ Silinemedi, tekrar deneyin.');
+    deletingRecipe = null;
+  }
 
-                    {viewingRecipe && (
-                        <div className="bg-white rounded-[3rem] p-10 border border-slate-100 shadow-2xl fade-in">
-                            <div className="flex justify-between items-center mb-10">
-                                <button onClick={() => setViewingRecipe(null)} className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-orange-500 transition-colors flex items-center gap-2">
-                                    ⬅ LİSTEYE DÖN
-                                </button>
-                                <button onClick={(e) => toggleFavorite(e, viewingRecipe)}>
-                                    <SimpleIcon type="heart" active={viewingRecipe.isFavorite} />
-                                </button>
-                            </div>
-                            
-                            <div className="mb-12 flex flex-wrap justify-between items-end gap-4">
-                                <div>
-                                    <span className="text-orange-500 font-black text-[11px] uppercase tracking-[0.2em]">{viewingRecipe.category}</span>
-                                    <h2 className="text-5xl font-black text-slate-900 mt-2 tracking-tighter leading-tight">{viewingRecipe.title}</h2>
-                                </div>
-                            </div>
-                            
-                            <div className="grid md:grid-cols-2 gap-12">
-                                <div className="space-y-6">
-                                    <h4 className="font-black text-xs uppercase tracking-widest flex items-center gap-2 text-slate-800">
-                                        <span className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center"><SimpleIcon type="list" /></span> Malzemeler
-                                    </h4>
-                                    <div className="bg-slate-50 p-8 rounded-[2rem] text-sm font-semibold text-slate-600 whitespace-pre-wrap border border-slate-100 italic">{viewingRecipe.ingredients}</div>
-                                </div>
-                                <div className="space-y-6">
-                                    <h4 className="font-black text-xs uppercase tracking-widest flex items-center gap-2 text-slate-800">
-                                        <span className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center"><SimpleIcon type="book" /></span> Nasıl Yapılır?
-                                    </h4>
-                                    <div className="text-slate-600 font-medium leading-relaxed whitespace-pre-wrap text-base">{viewingRecipe.instructions}</div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.style.opacity = '1';
+    setTimeout(() => { t.style.opacity = '0'; }, 2500);
+  }
 
-                    <footer className="mt-20 text-center">
-                        <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.5em]">Koleksiyon Şefi • 2024</p>
-                    </footer>
-                </div>
-            );
-        };
-
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
-</body>
+  lucide.createIcons();
+</script>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9ee3140091c6d175',t:'MTc3NjUwOTEwNy4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
