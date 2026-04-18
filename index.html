@@ -62,8 +62,6 @@
         import { getFirestore, collection, addDoc, onSnapshot, query, doc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         window.fb = { initializeApp, getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, getFirestore, collection, addDoc, onSnapshot, query, doc, updateDoc, serverTimestamp };
-        
-        // React'ın Firebase modüllerini beklediğinden emin olmak için bir event tetikleyelim
         window.dispatchEvent(new Event('firebase-ready'));
     </script>
 
@@ -92,7 +90,7 @@
                 }
             ];
 
-            // Firebase Yapılandırması
+            // Firebase Yapılandırması Kontrolü
             const configRaw = typeof __firebase_config !== 'undefined' ? __firebase_config : `{
                 "apiKey": "BURAYA_API_KEY_GELECEK",
                 "authDomain": "PROJE_ID.firebaseapp.com",
@@ -105,6 +103,19 @@
             const firebaseConfig = JSON.parse(configRaw);
             const isConfigValid = firebaseConfig.apiKey && firebaseConfig.apiKey !== "BURAYA_API_KEY_GELECEK";
 
+            // LocalStorage'dan veri yükleme (Yedek mod)
+            const loadLocalRecipes = () => {
+                const saved = localStorage.getItem('lezzet_defterim_local');
+                return saved ? JSON.parse(saved) : [];
+            };
+
+            const saveLocalRecipe = (newRecipe) => {
+                const current = loadLocalRecipes();
+                const updated = [...current, { ...newRecipe, id: Date.now().toString(), isLocal: true }];
+                localStorage.setItem('lezzet_defterim_local', JSON.stringify(updated));
+                setRecipes([...DEFAULT_RECIPES, ...updated]);
+            };
+
             useEffect(() => {
                 const handleFbReady = () => setFbReady(true);
                 window.addEventListener('firebase-ready', handleFbReady);
@@ -113,8 +124,10 @@
             }, []);
 
             useEffect(() => {
+                // Eğer yapılandırma yoksa veya Firebase hazır değilse LocalStorage moduna geç
                 if (!fbReady || !isConfigValid) {
-                    setRecipes(DEFAULT_RECIPES);
+                    const localData = loadLocalRecipes();
+                    setRecipes([...DEFAULT_RECIPES, ...localData]);
                     setLoading(false);
                     return;
                 }
@@ -143,11 +156,11 @@
                             const q = collection(db, 'artifacts', appId, 'public', 'data', 'recipes');
                             const unsubscribeSnapshot = onSnapshot(q, (snapshot) => {
                                 const cloudData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, isCloud: true }));
-                                setRecipes([...DEFAULT_RECIPES, ...cloudData]);
+                                const localData = loadLocalRecipes();
+                                setRecipes([...DEFAULT_RECIPES, ...localData, ...cloudData]);
                                 setLoading(false);
                             }, (err) => {
-                                console.error("Firestore Hatası:", err);
-                                setRecipes(DEFAULT_RECIPES);
+                                setRecipes([...DEFAULT_RECIPES, ...loadLocalRecipes()]);
                                 setLoading(false);
                             });
                             return () => unsubscribeSnapshot();
@@ -156,8 +169,7 @@
 
                     return () => unsubscribeAuth();
                 } catch (e) {
-                    console.error("Firebase Başlatma Hatası:", e);
-                    setRecipes(DEFAULT_RECIPES);
+                    setRecipes([...DEFAULT_RECIPES, ...loadLocalRecipes()]);
                     setLoading(false);
                 }
             }, [fbReady]);
@@ -168,10 +180,15 @@
 
             const handleAdd = async (e) => {
                 e.preventDefault();
+                
+                // Eğer Firebase yoksa direkt LocalStorage'a kaydet
                 if (!window.fb || !isConfigValid || !user) {
-                    alert("Bu özellik için Firebase yapılandırması gereklidir.");
+                    saveLocalRecipe(formData);
+                    setFormData({ title: '', category: 'Ana Yemekler', prepTime: '', ingredients: '', instructions: '' });
+                    setIsAddMode(false);
                     return;
                 }
+
                 const { getFirestore, collection, addDoc, serverTimestamp } = window.fb;
                 try {
                     const db = getFirestore();
@@ -184,7 +201,11 @@
                     });
                     setFormData({ title: '', category: 'Ana Yemekler', prepTime: '', ingredients: '', instructions: '' });
                     setIsAddMode(false);
-                } catch (e) { alert("Hata: " + e.message); }
+                } catch (e) { 
+                    // Cloud hatası alırsak yine lokale yedekle
+                    saveLocalRecipe(formData);
+                    setIsAddMode(false);
+                }
             };
 
             const filtered = useMemo(() => {
@@ -212,7 +233,7 @@
                         <div>
                             <h1 className="serif text-3xl tracking-tight leading-none">L'ART <span className="text-orange-500 italic">Cuisine</span></h1>
                             <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 mt-2">
-                                {isConfigValid ? "Cloud Senkronize" : "Statik Mod (Config Gerekli)"}
+                                {isConfigValid ? "Cloud Aktif" : "Yerel Depolama Modu"}
                             </p>
                         </div>
                         <button 
@@ -251,13 +272,16 @@
                                 </div>
 
                                 {loading ? (
-                                    <div className="text-center py-24 text-slate-300 animate-pulse font-black tracking-[0.5em] text-[10px] uppercase">Veritabanı Senkronize Ediliyor...</div>
+                                    <div className="text-center py-24 text-slate-300 animate-pulse font-black tracking-[0.5em] text-[10px] uppercase">Senkronize Ediliyor...</div>
                                 ) : (
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                                         {filtered.map(r => (
                                             <div key={r.id} onClick={() => setViewingRecipe(r)} className="recipe-card glass-card p-10 rounded-[3rem] cursor-pointer relative group">
                                                 <div className="flex justify-between items-start mb-10">
-                                                    <span className="text-[9px] font-black text-orange-500 bg-orange-50 px-4 py-2 rounded-full uppercase tracking-widest">{r.category}</span>
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className="text-[9px] font-black text-orange-500 bg-orange-50 px-4 py-2 rounded-full uppercase tracking-widest w-fit">{r.category}</span>
+                                                        {r.isLocal && <span className="text-[7px] font-bold text-slate-400 ml-1">CIHAZDA KAYITLI</span>}
+                                                    </div>
                                                     {r.isFavorite && <Icon name="heart" className="w-4 h-4 text-red-500" />}
                                                 </div>
                                                 <h3 className="serif text-2xl mb-6 group-hover:text-orange-500 transition-colors leading-tight">{r.title}</h3>
@@ -300,7 +324,7 @@
                                         <textarea required className="w-full p-6 bg-slate-50 rounded-3xl outline-none font-medium h-32 resize-none" value={formData.ingredients} onChange={e => setFormData({...formData, ingredients: e.target.value})} />
                                     </div>
                                     <button className="w-full bg-slate-900 text-white p-8 rounded-full font-black text-sm tracking-[0.2em] shadow-2xl hover:bg-orange-500 transition-all uppercase mt-4">
-                                        VERİTABANINA KAYDET
+                                        ÜRÜNÜ KAYDET
                                     </button>
                                 </form>
                             </div>
@@ -309,9 +333,7 @@
                         {viewingRecipe && (
                             <div className="fade-in max-w-4xl mx-auto glass-card p-16 rounded-[4rem] shadow-2xl relative overflow-hidden">
                                 <div className="absolute top-0 right-0 w-64 h-64 bg-orange-50 rounded-full blur-3xl opacity-50 -mr-32 -mt-32"></div>
-                                
                                 <button onClick={() => setViewingRecipe(null)} className="text-[10px] font-black text-slate-300 hover:text-orange-500 tracking-[0.2em] mb-12 block transition-all relative z-10">← LİSTEYE DÖN</button>
-                                
                                 <div className="mb-16 relative z-10">
                                     <span className="text-orange-500 font-bold text-xs uppercase tracking-[0.3em]">{viewingRecipe.category}</span>
                                     <h2 className="serif text-6xl mt-4 mb-4 text-slate-900">{viewingRecipe.title}</h2>
@@ -320,7 +342,6 @@
                                         {viewingRecipe.prepTime} DAKİKA HAZIRLIK SÜRESİ
                                     </p>
                                 </div>
-                                
                                 <div className="grid md:grid-cols-2 gap-20 relative z-10">
                                     <div className="space-y-8">
                                         <h4 className="font-black text-[10px] uppercase tracking-widest text-slate-800 border-b border-slate-100 pb-4 flex items-center gap-3">
@@ -342,7 +363,6 @@
                             </div>
                         )}
                     </main>
-                    
                     <footer className="max-w-5xl mx-auto mt-24 text-center">
                         <p className="text-[9px] font-black text-slate-300 uppercase tracking-[1em]">L'ART CUISINE INFRASTRUCTURE</p>
                     </footer>
