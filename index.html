@@ -1,230 +1,358 @@
-#include <iostream>
-#include <vector>
-#include <string>
-#include <algorithm>
-#include <random>
-#include <map>
+import React, { useState, useEffect, useMemo } from 'react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getFirestore, 
+  collection, 
+  addDoc, 
+  onSnapshot, 
+  query, 
+  doc, 
+  deleteDoc, 
+  updateDoc 
+} from 'firebase/firestore';
+import { 
+  getAuth, 
+  signInAnonymously, 
+  signInWithCustomToken, 
+  onAuthStateChanged 
+} from 'firebase/auth';
+import { 
+  Plus, 
+  Search, 
+  Trash2, 
+  BookOpen, 
+  Clock, 
+  Utensils, 
+  ChevronRight,
+  X
+} from 'lucide-react';
 
-using namespace std;
+// --- Firebase Configuration ---
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'recipe-book-app';
 
-// =============================
-// MAHKEME DEDÜKSİYON OYUNU v1 (C++)
-// Terminal üzerinden oynanır
-// =============================
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [recipes, setRecipes] = useState([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(true);
+  
+  // New Recipe Form State
+  const [newRecipe, setNewRecipe] = useState({
+    title: '',
+    category: 'Ana Yemek',
+    prepTime: '',
+    ingredients: '',
+    instructions: '',
+    imageUrl: ''
+  });
 
-vector<string> ROLES = {"Katil", "Savcı", "Hakim", "Avukat", "Şüpheli"};
-
-struct Player {
-    string name;
-    string role;
-    vector<string> knowledge;
-    bool is_alive = true;
-};
-
-// Random engine
-random_device rd;
-mt19937 rng(rd());
-
-// -----------------------------
-// DELİL SİSTEMİ
-// -----------------------------
-
-vector<string> generate_evidence() {
-    vector<string> evidences = {
-        "Kan izi iki farklı yöne gidiyor",
-        "Parmak izi Şüpheli A'ya ait",
-        "İki farklı ayak izi var",
-        "Telefon logları gece 02:00",
-        "Kredi kartı olaydan sonra kullanılmış",
-        "Görgü tanığı birini koşarken gördü",
-        "Cüzdan olay yerinde yok"
-    };
-
-    shuffle(evidences.begin(), evidences.end(), rng);
-    return evidences;
-}
-
-// -----------------------------
-// OYUN SINIFI
-// -----------------------------
-
-class Game {
-public:
-    vector<Player> players;
-    vector<string> evidences;
-    int killerIndex = -1;
-
-    Game(const vector<string>& names) {
-        evidences = generate_evidence();
-        assign_roles(names);
-        distribute_knowledge();
-    }
-
-    void assign_roles(const vector<string>& names) {
-        vector<string> roles = ROLES;
-        shuffle(roles.begin(), roles.end(), rng);
-
-        for (size_t i = 0; i < names.size(); i++) {
-            Player p;
-            p.name = names[i];
-            p.role = roles[i % roles.size()];
-
-            if (p.role == "Katil") {
-                killerIndex = i;
-            }
-
-            players.push_back(p);
-        }
-    }
-
-    void distribute_knowledge() {
-        uniform_int_distribution<> dist(0, evidences.size() - 1);
-
-        for (auto &p : players) {
-            for (int i = 0; i < 2; i++) {
-                p.knowledge.push_back(evidences[dist(rng)]);
-            }
-        }
-
-        // Savcı ekstra bilgi
-        for (auto &p : players) {
-            if (p.role == "Savcı") {
-                p.knowledge.push_back("Şüpheli A benim kardeşim...");
-            }
-        }
-
-        // Katil sahte bilgi
-        if (killerIndex != -1) {
-            uniform_int_distribution<> dist2(0, evidences.size() - 1);
-            players[killerIndex].knowledge.push_back("(SAHTE) " + evidences[dist2(rng)]);
-        }
-    }
-
-    void show_player_info(Player &p) {
-        cout << "\n=== " << p.name << " ===\n";
-        cout << "Rolün: " << p.role << "\n";
-        cout << "Bildiklerin:\n";
-        for (auto &k : p.knowledge) {
-            cout << "- " << k << "\n";
-        }
-        cin.ignore();
-        cin.get();
-    }
-
-    void discussion_phase() {
-        cout << "\n--- TARTIŞMA FAZI ---\n";
-        for (auto &p : players) {
-            cout << p.name << " konuşmak için ENTER bas...";
-            cin.ignore();
-            cin.get();
-        }
-    }
-
-    string voting_phase() {
-        cout << "\n--- OYLAMA ---\n";
-        map<string, int> votes;
-
-        for (auto &voter : players) {
-            cout << "\n" << voter.name << " oy veriyor\n";
-
-            for (size_t i = 0; i < players.size(); i++) {
-                cout << i << ": " << players[i].name << "\n";
-            }
-
-            int choice;
-            cout << "Kimi suçluyorsun?: ";
-            cin >> choice;
-
-            string selected = players[choice].name;
-            votes[selected]++;
-        }
-
-        string accused;
-        int maxVotes = 0;
-
-        for (auto &v : votes) {
-            if (v.second > maxVotes) {
-                maxVotes = v.second;
-                accused = v.first;
-            }
-        }
-
-        cout << "\nEn çok oy alan: " << accused << "\n";
-        return accused;
-    }
-
-    void court_phase(const string &accused_name) {
-        cout << "\n--- MAHKEME ---\n";
-
-        Player* judge = nullptr;
-        for (auto &p : players) {
-            if (p.role == "Hakim") judge = &p;
-        }
-
-        if (!judge) {
-            cout << "Hakim yok!\n";
-            return;
-        }
-
-        cout << "Hakim: " << judge->name << "\n";
-        cout << "Sanık: " << accused_name << "\n";
-
-        char decision;
-        cout << "Suçlu mu? (e/h): ";
-        cin >> decision;
-
-        Player* accused = nullptr;
-        for (auto &p : players) {
-            if (p.name == accused_name) accused = &p;
-        }
-
-        if (decision == 'e') {
-            if (accused == &players[killerIndex]) {
-                cout << "\nDOĞRU KARAR! Katil yakalandı!\n";
-            } else {
-                cout << "\nYANLIŞ! Masum biri cezalandırıldı!\n";
-                cout << "Gerçek katil: " << players[killerIndex].name << "\n";
-            }
+  // 1. Authentication
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
         } else {
-            cout << "\nSerbest bırakıldı...\n";
-            cout << "Gerçek katil: " << players[killerIndex].name << "\n";
+          await signInAnonymously(auth);
         }
+      } catch (error) {
+        console.error("Auth error:", error);
+      }
+    };
+    initAuth();
+
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // 2. Data Fetching (Public Data Collection)
+  useEffect(() => {
+    if (!user) return;
+
+    const recipesRef = collection(db, 'artifacts', appId, 'public', 'data', 'recipes');
+    
+    const unsubscribe = onSnapshot(recipesRef, 
+      (snapshot) => {
+        const docs = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setRecipes(docs);
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Firestore error:", error);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user]);
+
+  // Actions
+  const handleAddRecipe = async (e) => {
+    e.preventDefault();
+    if (!user) return;
+
+    try {
+      const recipesRef = collection(db, 'artifacts', appId, 'public', 'data', 'recipes');
+      await addDoc(recipesRef, {
+        ...newRecipe,
+        createdAt: new Date().toISOString(),
+        userId: user.uid
+      });
+      setIsModalOpen(false);
+      setNewRecipe({
+        title: '',
+        category: 'Ana Yemek',
+        prepTime: '',
+        ingredients: '',
+        instructions: '',
+        imageUrl: ''
+      });
+    } catch (error) {
+      console.error("Error adding recipe:", error);
     }
-};
+  };
 
-// -----------------------------
-// MAIN
-// -----------------------------
-
-int main() {
-    cout << "=== MAHKEME OYUNU (C++) ===\n";
-
-    int count;
-    cout << "Kaç oyuncu var?: ";
-    cin >> count;
-
-    vector<string> names;
-    for (int i = 0; i < count; i++) {
-        string name;
-        cout << "Oyuncu " << i+1 << " adı: ";
-        cin >> name;
-        names.push_back(name);
+  const handleDeleteRecipe = async (id) => {
+    try {
+      const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'recipes', id);
+      await deleteDoc(docRef);
+    } catch (error) {
+      console.error("Error deleting recipe:", error);
     }
+  };
 
-    Game game(names);
+  const filteredRecipes = useMemo(() => {
+    return recipes.filter(r => 
+      r.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      r.category.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [recipes, searchTerm]);
 
-    cout << "\nBir kişi gece sokakta ölü bulundu...\n";
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-orange-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-orange-500"></div>
+      </div>
+    );
+  }
 
-    for (auto &p : game.players) {
-        cout << "\nSıradaki: " << p.name << " (kimse bakmasın!) ENTER...";
-        cin.ignore();
-        cin.get();
-        game.show_player_info(p);
-    }
+  return (
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
+      {/* Header */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
+        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="bg-orange-500 p-2 rounded-lg">
+              <BookOpen className="text-white w-6 h-6" />
+            </div>
+            <h1 className="text-xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
+              Lezzet Defterim
+            </h1>
+          </div>
+          
+          <div className="flex items-center gap-4 flex-1 max-w-md mx-8">
+            <div className="relative w-full">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+              <input 
+                type="text"
+                placeholder="Tarif veya kategori ara..."
+                className="w-full pl-10 pr-4 py-2 bg-slate-100 border-none rounded-full focus:ring-2 focus:ring-orange-500 transition-all outline-none text-sm"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+          </div>
 
-    game.discussion_phase();
-    string accused = game.voting_phase();
-    game.court_phase(accused);
+          <button 
+            onClick={() => setIsModalOpen(true)}
+            className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-full flex items-center gap-2 font-medium transition-colors shadow-sm"
+          >
+            <Plus className="w-4 h-4" />
+            <span className="hidden sm:inline">Tarif Ekle</span>
+          </button>
+        </div>
+      </header>
 
-    return 0;
+      {/* Main Content */}
+      <main className="max-w-6xl mx-auto px-4 py-8">
+        {loading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[1, 2, 3].map(n => (
+              <div key={n} className="h-64 bg-slate-200 animate-pulse rounded-2xl"></div>
+            ))}
+          </div>
+        ) : filteredRecipes.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredRecipes.map((recipe) => (
+              <div key={recipe.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden group hover:shadow-md transition-shadow">
+                <div className="h-48 bg-slate-200 relative overflow-hidden">
+                  <img 
+                    src={recipe.imageUrl || `https://images.unsplash.com/photo-1495521821757-a1efb6729352?w=500&q=80`} 
+                    alt={recipe.title}
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                    onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1495521821757-a1efb6729352?w=500&q=80' }}
+                  />
+                  <div className="absolute top-3 right-3 flex gap-2">
+                    <button 
+                      onClick={() => handleDeleteRecipe(recipe.id)}
+                      className="p-2 bg-white/90 backdrop-blur rounded-full text-red-500 hover:bg-red-500 hover:text-white transition-colors shadow-sm"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="absolute bottom-3 left-3">
+                    <span className="px-3 py-1 bg-orange-500 text-white text-xs font-bold rounded-full uppercase tracking-wider">
+                      {recipe.category}
+                    </span>
+                  </div>
+                </div>
+                <div className="p-5">
+                  <h3 className="text-lg font-bold mb-2 group-hover:text-orange-600 transition-colors line-clamp-1">
+                    {recipe.title}
+                  </h3>
+                  <div className="flex items-center gap-4 text-slate-500 text-sm mb-4">
+                    <div className="flex items-center gap-1">
+                      <Clock className="w-4 h-4" />
+                      {recipe.prepTime} dk
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Utensils className="w-4 h-4" />
+                      {recipe.ingredients.split(',').length} Malzeme
+                    </div>
+                  </div>
+                  <button className="w-full py-2 border border-slate-200 rounded-lg text-slate-600 font-medium hover:bg-slate-50 flex items-center justify-center gap-1 group/btn">
+                    Tarifi Gör
+                    <ChevronRight className="w-4 h-4 transition-transform group-hover/btn:translate-x-1" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-20">
+            <div className="bg-slate-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400">
+              <Utensils className="w-10 h-10" />
+            </div>
+            <h2 className="text-xl font-semibold text-slate-600">Henüz tarif bulunamadı</h2>
+            <p className="text-slate-400 mt-2">Hemen ilk tarifini ekleyerek başlayabilirsin!</p>
+          </div>
+        )}
+      </main>
+
+      {/* Add Recipe Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsModalOpen(false)}></div>
+          <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto relative shadow-2xl animate-in fade-in zoom-in duration-200">
+            <div className="p-6 border-b sticky top-0 bg-white flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-slate-800">Yeni Tarif Ekle</h2>
+              <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleAddRecipe} className="p-6 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-slate-700">Yemek Adı</label>
+                  <input 
+                    required
+                    type="text" 
+                    className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-orange-500 outline-none"
+                    placeholder="Örn: Karnıyarık"
+                    value={newRecipe.title}
+                    onChange={e => setNewRecipe({...newRecipe, title: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-slate-700">Kategori</label>
+                  <select 
+                    className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-orange-500 outline-none"
+                    value={newRecipe.category}
+                    onChange={e => setNewRecipe({...newRecipe, category: e.target.value})}
+                  >
+                    <option>Ana Yemek</option>
+                    <option>Tatlı</option>
+                    <option>Çorba</option>
+                    <option>Salata</option>
+                    <option>Kahvaltılık</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-slate-700">Hazırlanış Süresi (Dakika)</label>
+                  <input 
+                    required
+                    type="number" 
+                    className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-orange-500 outline-none"
+                    placeholder="Örn: 45"
+                    value={newRecipe.prepTime}
+                    onChange={e => setNewRecipe({...newRecipe, prepTime: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-slate-700">Görsel URL (Opsiyonel)</label>
+                  <input 
+                    type="text" 
+                    className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-orange-500 outline-none"
+                    placeholder="https://..."
+                    value={newRecipe.imageUrl}
+                    onChange={e => setNewRecipe({...newRecipe, imageUrl: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-slate-700">Malzemeler (Virgülle ayırın)</label>
+                <textarea 
+                  required
+                  rows="3"
+                  className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-orange-500 outline-none"
+                  placeholder="Domates, Biber, Patlıcan..."
+                  value={newRecipe.ingredients}
+                  onChange={e => setNewRecipe({...newRecipe, ingredients: e.target.value})}
+                ></textarea>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-slate-700">Hazırlanış Adımları</label>
+                <textarea 
+                  required
+                  rows="5"
+                  className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-orange-500 outline-none"
+                  placeholder="Patlıcanları pijama şeklinde soyun..."
+                  value={newRecipe.instructions}
+                  onChange={e => setNewRecipe({...newRecipe, instructions: e.target.value})}
+                ></textarea>
+              </div>
+
+              <button 
+                type="submit"
+                className="w-full py-4 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl transition-colors shadow-lg shadow-orange-200"
+              >
+                Tarifi Kaydet
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Floating User ID Info (Developer/Debug) */}
+      <footer className="fixed bottom-4 left-4 text-[10px] text-slate-400 bg-white/80 px-2 py-1 rounded-md">
+        ID: {user.uid}
+      </footer>
+    </div>
+  );
 }
