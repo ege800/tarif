@@ -1,358 +1,588 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { initializeApp } from 'firebase/app';
-import { 
-  getFirestore, 
-  collection, 
-  addDoc, 
-  onSnapshot, 
-  query, 
-  doc, 
-  deleteDoc, 
-  updateDoc 
-} from 'firebase/firestore';
-import { 
-  getAuth, 
-  signInAnonymously, 
-  signInWithCustomToken, 
-  onAuthStateChanged 
-} from 'firebase/auth';
-import { 
-  Plus, 
-  Search, 
-  Trash2, 
-  BookOpen, 
-  Clock, 
-  Utensils, 
-  ChevronRight,
-  X
-} from 'lucide-react';
-
-// --- Firebase Configuration ---
-const firebaseConfig = JSON.parse(__firebase_config);
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'recipe-book-app';
-
-export default function App() {
-  const [user, setUser] = useState(null);
-  const [recipes, setRecipes] = useState([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [loading, setLoading] = useState(true);
-  
-  // New Recipe Form State
-  const [newRecipe, setNewRecipe] = useState({
-    title: '',
-    category: 'Ana Yemek',
-    prepTime: '',
-    ingredients: '',
-    instructions: '',
-    imageUrl: ''
-  });
-
-  // 1. Authentication
-  useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>9. Sınıf Biyoloji: Enzimler İnteraktif Öğrenme Platformu</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 650px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 320px;
+            max-height: 380px;
         }
-      } catch (error) {
-        console.error("Auth error:", error);
-      }
-    };
-    initAuth();
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 360px;
+            }
+        }
+        .flashcard-inner {
+            transition: transform 0.6s;
+            transform-style: preserve-3d;
+        }
+        .flashcard-flipped {
+            transform: rotateY(180deg);
+        }
+        .flashcard-front, .flashcard-back {
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+        }
+        .flashcard-back {
+            transform: rotateY(180deg);
+        }
+    </style>
+</head>
+<body class="bg-[#FAF9F5] text-[#3E3A35] font-sans antialiased min-h-screen flex flex-col">
 
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-    });
-    return () => unsubscribe();
-  }, []);
-
-  // 2. Data Fetching (Public Data Collection)
-  useEffect(() => {
-    if (!user) return;
-
-    const recipesRef = collection(db, 'artifacts', appId, 'public', 'data', 'recipes');
-    
-    const unsubscribe = onSnapshot(recipesRef, 
-      (snapshot) => {
-        const docs = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        setRecipes(docs);
-        setLoading(false);
-      },
-      (error) => {
-        console.error("Firestore error:", error);
-        setLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [user]);
-
-  // Actions
-  const handleAddRecipe = async (e) => {
-    e.preventDefault();
-    if (!user) return;
-
-    try {
-      const recipesRef = collection(db, 'artifacts', appId, 'public', 'data', 'recipes');
-      await addDoc(recipesRef, {
-        ...newRecipe,
-        createdAt: new Date().toISOString(),
-        userId: user.uid
-      });
-      setIsModalOpen(false);
-      setNewRecipe({
-        title: '',
-        category: 'Ana Yemek',
-        prepTime: '',
-        ingredients: '',
-        instructions: '',
-        imageUrl: ''
-      });
-    } catch (error) {
-      console.error("Error adding recipe:", error);
-    }
-  };
-
-  const handleDeleteRecipe = async (id) => {
-    try {
-      const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'recipes', id);
-      await deleteDoc(docRef);
-    } catch (error) {
-      console.error("Error deleting recipe:", error);
-    }
-  };
-
-  const filteredRecipes = useMemo(() => {
-    return recipes.filter(r => 
-      r.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      r.category.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [recipes, searchTerm]);
-
-  if (!user) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-orange-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-orange-500"></div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
-      {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="bg-orange-500 p-2 rounded-lg">
-              <BookOpen className="text-white w-6 h-6" />
+    <header class="bg-[#F1EFEA] border-b border-[#E6E2D8] sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <span class="bg-[#7A8B7B] text-white p-2 rounded-lg font-bold text-lg">🧬</span>
+                <h1 class="text-xl font-bold tracking-tight text-[#2C2925]">EnzimAtlası</h1>
             </div>
-            <h1 className="text-xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
-              Lezzet Defterim
-            </h1>
-          </div>
-          
-          <div className="flex items-center gap-4 flex-1 max-w-md mx-8">
-            <div className="relative w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-              <input 
-                type="text"
-                placeholder="Tarif veya kategori ara..."
-                className="w-full pl-10 pr-4 py-2 bg-slate-100 border-none rounded-full focus:ring-2 focus:ring-orange-500 transition-all outline-none text-sm"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+            <nav class="hidden md:flex space-x-1">
+                <button onclick="scrollToSection('kartlar-bolumu')" class="px-4 py-2 text-sm font-medium text-[#5C564E] hover:text-[#2C2925] hover:bg-[#E6E2D8] rounded-md transition">Temel Kavramlar</button>
+                <button onclick="scrollToSection('laboratuvar-bolumu')" class="px-4 py-2 text-sm font-medium text-[#5C564E] hover:text-[#2C2925] hover:bg-[#E6E2D8] rounded-md transition">Etki Simülatörü</button>
+                <button onclick="scrollToSection('mekanizma-bolumu')" class="px-4 py-2 text-sm font-medium text-[#5C564E] hover:text-[#2C2925] hover:bg-[#E6E2D8] rounded-md transition">Çalışma Modelleri</button>
+                <button onclick="scrollToSection('test-bolumu')" class="px-4 py-2 text-sm font-medium text-[#5C564E] hover:text-[#2C2925] hover:bg-[#E6E2D8] rounded-md transition">Hızlı Sınama</button>
+            </nav>
+            <div class="md:hidden">
+                <span class="text-xs text-[#7A8B7B] font-semibold border border-[#7A8B7B] px-2 py-1 rounded">9. Sınıf Müfredatı</span>
             </div>
-          </div>
-
-          <button 
-            onClick={() => setIsModalOpen(true)}
-            className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-full flex items-center gap-2 font-medium transition-colors shadow-sm"
-          >
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">Tarif Ekle</span>
-          </button>
         </div>
-      </header>
+    </header>
 
-      {/* Main Content */}
-      <main className="max-w-6xl mx-auto px-4 py-8">
-        {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1, 2, 3].map(n => (
-              <div key={n} className="h-64 bg-slate-200 animate-pulse rounded-2xl"></div>
-            ))}
-          </div>
-        ) : filteredRecipes.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredRecipes.map((recipe) => (
-              <div key={recipe.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden group hover:shadow-md transition-shadow">
-                <div className="h-48 bg-slate-200 relative overflow-hidden">
-                  <img 
-                    src={recipe.imageUrl || `https://images.unsplash.com/photo-1495521821757-a1efb6729352?w=500&q=80`} 
-                    alt={recipe.title}
-                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                    onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1495521821757-a1efb6729352?w=500&q=80' }}
-                  />
-                  <div className="absolute top-3 right-3 flex gap-2">
-                    <button 
-                      onClick={() => handleDeleteRecipe(recipe.id)}
-                      className="p-2 bg-white/90 backdrop-blur rounded-full text-red-500 hover:bg-red-500 hover:text-white transition-colors shadow-sm"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <div className="absolute bottom-3 left-3">
-                    <span className="px-3 py-1 bg-orange-500 text-white text-xs font-bold rounded-full uppercase tracking-wider">
-                      {recipe.category}
-                    </span>
-                  </div>
-                </div>
-                <div className="p-5">
-                  <h3 className="text-lg font-bold mb-2 group-hover:text-orange-600 transition-colors line-clamp-1">
-                    {recipe.title}
-                  </h3>
-                  <div className="flex items-center gap-4 text-slate-500 text-sm mb-4">
-                    <div className="flex items-center gap-1">
-                      <Clock className="w-4 h-4" />
-                      {recipe.prepTime} dk
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Utensils className="w-4 h-4" />
-                      {recipe.ingredients.split(',').length} Malzeme
-                    </div>
-                  </div>
-                  <button className="w-full py-2 border border-slate-200 rounded-lg text-slate-600 font-medium hover:bg-slate-50 flex items-center justify-center gap-1 group/btn">
-                    Tarifi Gör
-                    <ChevronRight className="w-4 h-4 transition-transform group-hover/btn:translate-x-1" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-20">
-            <div className="bg-slate-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400">
-              <Utensils className="w-10 h-10" />
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-16">
+        
+        <section class="bg-gradient-to-br from-[#EAE8E1] to-[#F1EFEA] rounded-2xl p-6 sm:p-10 border border-[#DCD8CD] shadow-sm">
+            <div class="max-w-3xl">
+                <span class="inline-block bg-[#8FA490] text-white text-xs px-3 py-1 rounded-full font-semibold uppercase tracking-wider mb-4">Son Güncel Müfredat Özeti</span>
+                <h2 class="text-3xl sm:text-4xl font-extrabold text-[#2C2925] tracking-tight mb-4">Biyolojik Katalizörler: Enzimlerin Dünyasını Keşfedin</h2>
+                <p class="text-base sm:text-lg text-[#5C564E] leading-relaxed">
+                    Canlılığın devamı için hücrelerimizde her saniye binlerce kimyasal reaksiyon gerçekleşir. Enzimler, bu reaksiyonların başlayabilmesi için gereken yüksek aktivasyon enerjisi bariyerini düşüren ve reaksiyonları milyonlarca kat hızlandıran hayati proteinlerdir. Bu interaktif platform, enzimleri ezberlemek yerine mekanizmalarını görerek, parametreleri değiştirip grafik sonuçlarını test ederek anlamanız için tasarlanmıştır.
+                </p>
             </div>
-            <h2 className="text-xl font-semibold text-slate-600">Henüz tarif bulunamadı</h2>
-            <p className="text-slate-400 mt-2">Hemen ilk tarifini ekleyerek başlayabilirsin!</p>
-          </div>
-        )}
-      </main>
+        </section>
 
-      {/* Add Recipe Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsModalOpen(false)}></div>
-          <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto relative shadow-2xl animate-in fade-in zoom-in duration-200">
-            <div className="p-6 border-b sticky top-0 bg-white flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-slate-800">Yeni Tarif Ekle</h2>
-              <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
-                <X className="w-6 h-6" />
-              </button>
+        <section id="kartlar-bolumu" class="space-y-6">
+            <div class="border-l-4 border-[#7A8B7B] pl-4">
+                <h3 class="text-2xl font-bold text-[#2C2925]">1. Temel Kavramlar ve Hafıza Kartları</h3>
+                <p class="text-sm text-[#6E675F] mt-1">
+                    Bu bölüm, 9. Sınıf Biyoloji ünitelerinde karşınıza çıkacak en kritik enzim tanımlarını içerir. Kartların üzerine tıklayarak arka yüzlerindeki detaylı ve net açıklamalara ulaşabilirsiniz. Bilgilerinizi tazelemek ve hızlıca ezber yapmak için harika bir yöntemdir!
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6" id="flashcards-grid">
+            </div>
+
+            <div class="flex justify-center pt-2">
+                <span class="text-xs text-[#8A8279] italic flex items-center bg-[#F1EFEA] px-3 py-1 rounded-full border border-[#E6E2D8]">
+                    💡 İpucu: Kartların yapısal özelliklerini tam kavramak için hepsini en az bir kez çeviriniz.
+                </span>
+            </div>
+        </section>
+
+        <section id="laboratuvar-bolumu" class="space-y-6 bg-[#F6F4EE] p-6 rounded-2xl border border-[#E6E2D8]">
+            <div class="border-l-4 border-[#D0A98C] pl-4">
+                <h3 class="text-2xl font-bold text-[#2C2925]">2. İnteraktif Çevresel Faktörler Laboratuvarı</h3>
+                <p class="text-sm text-[#6E675F] mt-1">
+                    Enzimlerin protein yapısı, çevre koşullarından doğrudan etkilenir. Aşağıdaki kontrol panelini kullanarak farklı çevresel faktörleri (Sıcaklık, pH, Su Oranı) seçebilir ve reaksiyon hızındaki değişimi canlı grafik üzerinden gözlemleyebilirsiniz. Değerleri değiştirerek optimum noktaları ve denatürasyon eşiklerini keşfedin.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                <div class="lg:col-span-4 space-y-6 bg-white p-5 rounded-xl border border-[#E6E2D8] shadow-sm">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-[#7A6E65] mb-2">İncelenecek Faktör Seçimi</label>
+                        <select id="factor-select" onchange="updateSimulation()" class="w-full bg-[#FAF9F5] border border-[#DCD8CD] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#7A8B7B]">
+                            <option value="temperature">Sıcaklık (°C)</option>
+                            <option value="ph">pH Derecesi (Asitlik / Bazlık)</option>
+                            <option value="water">Su Oranı (%)</option>
+                        </select>
+                    </div>
+
+                    <div id="slider-control-container" class="space-y-3 pt-2">
+                        <div class="flex justify-between items-center">
+                            <span id="slider-label" class="text-sm font-medium text-[#3E3A35]">Mevcut Değer:</span>
+                            <span id="slider-value" class="text-base font-bold text-[#7A8B7B]">35</span>
+                        </div>
+                        <input type="range" id="factor-slider" oninput="handleSliderInput()" class="w-full h-2 bg-[#E6E2D8] rounded-lg appearance-none cursor-pointer accent-[#7A8B7B]">
+                        <div class="flex justify-between text-xxs text-[#8A8279]">
+                            <span id="slider-min">0</span>
+                            <span id="slider-max">100</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-[#FAF9F5] p-3 rounded-lg border border-[#E6E2D8]">
+                        <h4 class="text-xs font-bold text-[#2C2925] uppercase tracking-wide mb-1">Bilimsel Analiz & Bulgular</h4>
+                        <p id="analysis-text" class="text-xs text-[#5C564E] leading-relaxed">
+                            Yükleniyor...
+                        </p>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-8 bg-white p-5 rounded-xl border border-[#E6E2D8] shadow-sm flex flex-col justify-between">
+                    <div class="mb-3 flex items-center justify-between">
+                        <span class="text-sm font-bold text-[#2C2925] flex items-center">
+                            <span class="w-2 h-2 rounded-full bg-[#7A8B7B] mr-2"></span>
+                            Reaksiyon Hızı Grafiği
+                        </span>
+                        <span id="graph-badge" class="text-xs bg-[#EAE8E1] text-[#5C564E] px-2 py-0.5 rounded">Canlı Veri</span>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="simulationChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="mekanizma-bolumu" class="space-y-6">
+            <div class="border-l-4 border-[#7A8B7B] pl-4">
+                <h3 class="text-2xl font-bold text-[#2C2925]">3. Çalışma Mekanizmaları ve Yapısal Modeller</h3>
+                <p class="text-sm text-[#6E675F] mt-1">
+                    Enzimler rastgele çalışmazlar; belirli bir geometrik ve fonksiyonel düzenleri vardır. Bu bölümde enzimlerin en temel iki çalışma biçimini inceleyeceğiz: "Anahtar-Kilit İlişkisi" ve "Takım Halinde Hücresel İş Bölümü". İlgili sekmeye tıklayarak akış şemasını ve kritik kuralları dinamik olarak görüntüleyebilirsiniz.
+                </p>
+            </div>
+
+            <div class="flex space-x-2 border-b border-[#E6E2D8] pb-px">
+                <button id="tab-btn-1" onclick="switchModelTab(1)" class="px-4 py-2 text-sm font-medium border-b-2 border-[#7A8B7B] text-[#2C2925] transition focus:outline-none">
+                    Anahtar-Kilit ve Aktif Merkez
+                </button>
+                <button id="tab-btn-2" onclick="switchModelTab(2)" class="px-4 py-2 text-sm font-medium text-[#5C564E] hover:text-[#2C2925] border-b-2 border-transparent transition focus:outline-none">
+                    Takım Halinde Çalışma & Geri Bildirim
+                </button>
+            </div>
+
+            <div id="model-content-container" class="bg-white p-6 rounded-xl border border-[#E6E2D8] shadow-sm">
+            </div>
+        </section>
+
+        <section id="test-bolumu" class="space-y-6 bg-[#FAF9F5] border border-[#DCD8CD] p-6 rounded-2xl">
+            <div class="border-l-4 border-[#8FA490] pl-4">
+                <h3 class="text-2xl font-bold text-[#2C2925]">4. Hızlı Sınama ve Kazanım Kontrolü</h3>
+                <p class="text-sm text-[#6E675F] mt-1">
+                    Öğrendiğiniz bilgileri test etmeye hazır mısınız? Yazılı sınavlarınızda karşınıza sıklıkla çıkabilecek kritik MEB kazanımlarına uygun 3 adet soruyu çözerek anlık dönüt alın. Yanıtınızı işaretledikten sonra gerekçeli çözümü dikkatle okuyunuz.
+                </p>
+            </div>
+
+            <div class="space-y-6 max-w-4xl mx-auto" id="quiz-container">
             </div>
             
-            <form onSubmit={handleAddRecipe} className="p-6 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">Yemek Adı</label>
-                  <input 
-                    required
-                    type="text" 
-                    className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-orange-500 outline-none"
-                    placeholder="Örn: Karnıyarık"
-                    value={newRecipe.title}
-                    onChange={e => setNewRecipe({...newRecipe, title: e.target.value})}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">Kategori</label>
-                  <select 
-                    className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-orange-500 outline-none"
-                    value={newRecipe.category}
-                    onChange={e => setNewRecipe({...newRecipe, category: e.target.value})}
-                  >
-                    <option>Ana Yemek</option>
-                    <option>Tatlı</option>
-                    <option>Çorba</option>
-                    <option>Salata</option>
-                    <option>Kahvaltılık</option>
-                  </select>
-                </div>
-              </div>
+            <div id="quiz-score-banner" class="hidden text-center p-4 bg-[#EAE8E1] rounded-xl border border-[#DCD8CD] max-w-xl mx-auto">
+                <span class="text-base font-bold text-[#2C2925]" id="score-text">Tebrikler! Sınamayı tamamladınız.</span>
+            </div>
+        </section>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">Hazırlanış Süresi (Dakika)</label>
-                  <input 
-                    required
-                    type="number" 
-                    className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-orange-500 outline-none"
-                    placeholder="Örn: 45"
-                    value={newRecipe.prepTime}
-                    onChange={e => setNewRecipe({...newRecipe, prepTime: e.target.value})}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">Görsel URL (Opsiyonel)</label>
-                  <input 
-                    type="text" 
-                    className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-orange-500 outline-none"
-                    placeholder="https://..."
-                    value={newRecipe.imageUrl}
-                    onChange={e => setNewRecipe({...newRecipe, imageUrl: e.target.value})}
-                  />
-                </div>
-              </div>
+    </main>
 
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">Malzemeler (Virgülle ayırın)</label>
-                <textarea 
-                  required
-                  rows="3"
-                  className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-orange-500 outline-none"
-                  placeholder="Domates, Biber, Patlıcan..."
-                  value={newRecipe.ingredients}
-                  onChange={e => setNewRecipe({...newRecipe, ingredients: e.target.value})}
-                ></textarea>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">Hazırlanış Adımları</label>
-                <textarea 
-                  required
-                  rows="5"
-                  className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-orange-500 outline-none"
-                  placeholder="Patlıcanları pijama şeklinde soyun..."
-                  value={newRecipe.instructions}
-                  onChange={e => setNewRecipe({...newRecipe, instructions: e.target.value})}
-                ></textarea>
-              </div>
-
-              <button 
-                type="submit"
-                className="w-full py-4 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl transition-colors shadow-lg shadow-orange-200"
-              >
-                Tarifi Kaydet
-              </button>
-            </form>
-          </div>
+    <footer class="bg-[#2C2925] text-[#DCD8CD] py-8 mt-16 border-t border-[#1E1C1A]">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-3">
+            <p class="text-sm font-medium">9. Sınıf Biyoloji Akıllı Ders Materyali &copy; 2026</p>
+            <p class="text-xs text-[#8A8279] max-w-md mx-auto">
+                Bu uygulama, en son yayınlanan güncel lise biyoloji öğretim programı kaynakları baz alınarak, öğrencilerin dijital dünyada ders verimliliğini artırmak amacıyla hazırlanmıştır.
+            </p>
         </div>
-      )}
+    </footer>
 
-      {/* Floating User ID Info (Developer/Debug) */}
-      <footer className="fixed bottom-4 left-4 text-[10px] text-slate-400 bg-white/80 px-2 py-1 rounded-md">
-        ID: {user.uid}
-      </footer>
-    </div>
-  );
-}
+    <script>
+        const flashcardsData = [
+            { front: "Enzim", back: "Canlı hücrelerde üretilen, biyolojik reaksiyonları hızlandıran ve aktivasyon enerjisini düşüren biyolojik katalizörlerdir." },
+            { front: "Aktivasyon Enerjisi", back: "Bir kimyasal reaksiyonun başlayabilmesi için gerekli olan minimum enerji miktarıdır. Enzimler bu enerji engelini aşağı çeker." },
+            { front: "Apoenzim", back: "Bileşik bir enzimin protein kısmıdır. Enzimin hangi maddeye (substrata) etki edeceğini (özgünlüğünü) seçen ana bölümdür." },
+            { front: "Koenzim & Kofaktör", back: "Enzimin yardımcı kısımlarıdır. Organik olanlara (örneğin B vitaminleri) Koenzim, inorganik olanlara (Demir, Çinko gibi mineraller) Kofaktör denir." },
+            { front: "Substrat", back: "Enzimin reaksiyon sırasında doğrudan bağlandığı ve etki ederek ürüne dönüştürdüğü ham maddedir." },
+            { front: "Denatürasyon", back: "Yüksek sıcaklık veya aşırı pH kaymaları nedeniyle protein yapılı enzimin üç boyutlu bağlarının kalıcı olarak kopup bozulmasıdır." }
+        ];
+
+        const quizData = [
+            {
+                id: 1,
+                question: "Bir bitki tohumunun aylarca kuru bir depoda bozulmadan bekleyip, toprağa ekilip sulandığında hızla çimlenmeye başlamasının temel nedeni aşağıdakilerden hangisidir?",
+                options: [
+                    "Sıcaklığın protein yapısını bozması",
+                    "Hücrelerdeki su oranının %15'in üzerine çıkmasıyla enzimlerin aktifleşmesi",
+                    "Tohumun inorganik kofaktör depolamaya başlaması",
+                    "Enzimlerin takım halinde çalışmayı tamamen bırakması"
+                ],
+                correct: 1,
+                explanation: "Hücrelerde su oranı %15'in altına düştüğünde enzimlerin üç boyutlu esnekliği azalır ve reaksiyonlar tamamen durur. Sulama ile su oranı %15 barajını geçtiği an enzimler yeniden çalışmaya başlar."
+            },
+            {
+                id: 2,
+                question: "Kıymadan yapılan köftenin, parça etten yapılan bir yemeğe göre çok daha hızlı pişmesi ve sindirilmesi enzimlerle ilgili hangi temel kurala örnektir?",
+                options: [
+                    "Sıcaklık arttıkça enzimlerin yapısının bozulmasına",
+                    "Substrat yüzeyi arttıkça reaksiyon hızının artmasına",
+                    "Enzimlerin çift yönlü (tersinir) çalışabilmesine",
+                    "İnhibitör maddelerin aktif merkezi bloke etmesine"
+                ],
+                correct: 1,
+                explanation: "Et kıyma haline getirildiğinde toplam yüzey alanı katbekat artar. Enzimler substrata dış yüzeyinden bağlanmaya başladığı için, artan yüzey alanı reaksiyonların çok daha kısa sürede tamamlanmasını sağlar."
+            },
+            {
+                id: 3,
+                question: "Bileşik bir enzimde (Holoenzim) hangi kimyasal parça enzimin hangi spesifik substrata bağlanacağını belirlemekle görevlidir?",
+                options: [
+                    "Koenzim (Vitamin parçası)",
+                    "Kofaktör (Mineral parçası)",
+                    "Apoenzim (Protein kısmı)",
+                    "Aktivatör kimyasallar"
+                ],
+                correct: 2,
+                explanation: "Bileşik enzimlerde yardımcı kısımlar reaksiyonu gerçekleştiren esas işçilerken; protein yapıdaki Apoenzim kısmı, enzimin substratını tanıyan ve anahtar-kilit uyumunu sağlayan bölümdür."
+            }
+        ];
+
+        let currentChart = null;
+
+        window.onload = function() {
+            renderFlashcards();
+            initSimulationChart();
+            updateSimulation();
+            switchModelTab(1);
+            renderQuiz();
+        };
+
+        function scrollToSection(id) {
+            const element = document.getElementById(id);
+            if (element) {
+                element.scrollIntoView({ behavior: 'smooth' });
+            }
+        }
+
+        function renderFlashcards() {
+            const grid = document.getElementById('flashcards-grid');
+            grid.innerHTML = '';
+            
+            flashcardsData.forEach((card, index) => {
+                const cardWrapper = document.createElement('div');
+                cardWrapper.className = 'h-48 cursor-pointer [perspective:1000px]';
+                cardWrapper.onclick = () => {
+                    const inner = cardWrapper.querySelector('.flashcard-inner');
+                    inner.classList.toggle('flashcard-flipped');
+                };
+
+                cardWrapper.innerHTML = `
+                    <div class="flashcard-inner relative w-full h-full text-center rounded-xl shadow-xs border border-[#E6E2D8] bg-white transition-all duration-500">
+                        <div class="flashcard-front absolute inset-0 w-full h-full flex flex-col items-center justify-center p-4 bg-white rounded-xl">
+                            <span class="text-xs text-[#8FA490] font-mono tracking-widest uppercase mb-2">KAVRAM ${index + 1}</span>
+                            <h4 class="text-lg font-bold text-[#2C2925]">${card.front}</h4>
+                            <span class="mt-4 text-xs text-[#A1998E] font-medium flex items-center">
+                                Dokun ve Öğren
+                                <span class="ml-1 text-base">↺</span>
+                            </span>
+                        </div>
+                        <div class="flashcard-back absolute inset-0 w-full h-full flex items-center justify-center p-5 bg-[#FDFDFB] rounded-xl border-2 border-[#7A8B7B]">
+                            <p class="text-sm text-[#4A443C] font-normal leading-relaxed">${card.back}</p>
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(cardWrapper);
+            });
+        }
+
+        function initSimulationChart() {
+            const ctx = document.getElementById('simulationChart').getContext('2d');
+            currentChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Reaksiyon Hızı (%)',
+                        data: [],
+                        borderColor: '#7A8B7B',
+                        backgroundColor: 'rgba(122, 139, 123, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.3,
+                        pointBackgroundColor: '#2C2925',
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: '#2C2925',
+                            titleColor: '#FAF9F5',
+                            bodyColor: '#DCD8CD'
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: '#F1EFEA' },
+                            title: { display: true, text: '', color: '#5C564E', font: { size: 11 } },
+                            ticks: { color: '#8A8279' }
+                        },
+                        y: {
+                            min: 0,
+                            max: 110,
+                            grid: { color: '#F1EFEA' },
+                            title: { display: true, text: 'Nispi Reaksiyon Hızı (%)', color: '#5C564E', font: { size: 11 } },
+                            ticks: { color: '#8A8279' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateSimulation() {
+            const factor = document.getElementById('factor-select').value;
+            const slider = document.getElementById('factor-slider');
+            
+            let min, max, val, label, unit;
+            
+            if (factor === 'temperature') {
+                min = 0; max = 70; val = 37; label = 'Sıcaklık'; unit = '°C';
+            } else if (factor === 'ph') {
+                min = 0; max = 14; val = 7; label = 'pH Değeri'; unit = '';
+            } else {
+                min = 0; max = 50; val = 20; label = 'Su Oranı'; unit = '%';
+            }
+
+            slider.min = min;
+            slider.max = max;
+            slider.value = val;
+            
+            document.getElementById('slider-label').innerText = `Mevcut ${label}:`;
+            document.getElementById('slider-value').innerText = val + ' ' + unit;
+            document.getElementById('slider-min').innerText = min + unit;
+            document.getElementById('slider-max').innerText = max + unit;
+
+            generateGraphData(factor, val);
+        }
+
+        function handleSliderInput() {
+            const factor = document.getElementById('factor-select').value;
+            const val = parseFloat(document.getElementById('factor-slider').value);
+            let unit = factor === 'temperature' ? '°C' : (factor === 'water' ? '%' : '');
+            
+            document.getElementById('slider-value').innerText = val + ' ' + unit;
+            generateGraphData(factor, val);
+        }
+
+        function generateGraphData(factor, currentVal) {
+            let labels = [];
+            let dataPoints = [];
+            let analysis = "";
+            let xAxisTitle = "";
+
+            if (factor === 'temperature') {
+                xAxisTitle = "Sıcaklık (°C)";
+                for (let t = 0; t <= 70; t += 2) {
+                    labels.push(t);
+                    let rate = 0;
+                    if (t <= 37) {
+                        rate = Math.pow(t / 37, 2.5) * 100;
+                    } else if (t > 37 && t <= 55) {
+                        rate = 100 - Math.pow((t - 37) / 18, 2) * 100;
+                    } else {
+                        rate = 0;
+                    }
+                    rate = Math.max(0, rate);
+                    dataPoints.push(rate);
+                }
+                
+                if (currentVal < 20) {
+                    analysis = `Düşük sıcaklıkta (${currentVal}°C) moleküllerin kinetik enerjisi yetersiz olduğundan enzimler çalışamaz, ancak yapıları da bozulmaz (inaktif durum).`;
+                } else if (currentVal >= 35 && currentVal <= 40) {
+                    analysis = `Tebrikler! ${currentVal}°C insanın ve memeli canlıların optimum sıcaklık kuşağıdır. Reaksiyon hızı maksimum %100 seviyesindedir.`;
+                } else if (currentVal > 42 && currentVal <= 55) {
+                    analysis = `Tehlikeli Bölge! Sıcaklık ${currentVal}°C seviyesine ulaştığında yüksek ısı protein bağlarını sarsmaya başlar, hız hızla düşer.`;
+                } else {
+                    analysis = `Denatürasyon gerçekleşti! Sıcaklık enzim bağlarını geri dönüşümsüz bozdu. Reaksiyon hızı sıfıra indi, soğutulsa da geri gelmez.`;
+                }
+
+            } else if (factor === 'ph') {
+                xAxisTitle = "pH Derecesi";
+                for (let p = 0; p <= 14; p += 0.5) {
+                    labels.push(p);
+                    let rate = Math.max(0, 100 - Math.pow((p - 7) / 3, 2) * 100);
+                    dataPoints.push(rate);
+                }
+                
+                if (currentVal < 4.5) {
+                    analysis = `Mevcut pH (${currentVal}) aşırı asidiktir. Nötr ortam seven enzimlerin yapısını bozar. Ancak midemizde çalışan Pepsin enzimi tam bu asitlikte çalışır!`;
+                } else if (currentVal >= 6 && currentVal <= 8) {
+                    analysis = `pH ${currentVal} seviyesi nötr ortama yakındır. Amilaz gibi hücresel enzimlerin büyük kısmı bu aralıkta en verimli çalışmayı gösterir.`;
+                } else {
+                    analysis = `Mevcut pH (${currentVal}) bazik/aşırı baziktir. İnce bağırsakta görev alan Tripsinin sevdiği, ancak diğer genel enzimlerin denatüre olduğu bir ortamdır.`;
+                }
+
+            } else {
+                xAxisTitle = "Su Oranı (%)";
+                for (let w = 0; w <= 50; w += 2) {
+                    labels.push(w);
+                    let rate = 0;
+                    if (w < 15) {
+                        rate = 0;
+                    } else {
+                        rate = Math.min(100, Math.pow((w - 15) / 15, 0.5) * 100);
+                    }
+                    dataPoints.push(rate);
+                }
+                
+                if (currentVal < 15) {
+                    analysis = `Kritik Eşik! Su oranı %${currentVal} seviyesindedir. %15 sınırının altında enzimlerin esnek hareket kabiliyeti kaybolur ve reaksiyon hızı %0 olur.`;
+                } else {
+                    analysis = `Su oranı %${currentVal} ile sınırın üzerindedir. Enzim hidroliz ortamını bulduğu için reaksiyon aktiftir. Belli bir doygunluktan sonra hız sabit kalır.`;
+                }
+            }
+
+            document.getElementById('analysis-text').innerText = analysis;
+
+            currentChart.data.labels = labels;
+            currentChart.data.datasets[0].data = dataPoints;
+            currentChart.options.scales.x.title.text = xAxisTitle;
+
+            let pointRadii = labels.map(l => (l === currentVal) ? 7 : 0);
+            let pointHoverRadii = labels.map(l => (l === currentVal) ? 9 : 0);
+            
+            if (!pointRadii.includes(7)) {
+                let closestIndex = 0;
+                let minDiff = Infinity;
+                labels.forEach((l, idx) => {
+                    let diff = Math.abs(l - currentVal);
+                    if (diff < minDiff) { minDiff = diff; closestIndex = idx; }
+                });
+                pointRadii[closestIndex] = 7;
+                pointHoverRadii[closestIndex] = 9;
+            }
+
+            currentChart.data.datasets[0].pointRadius = pointRadii;
+            currentChart.data.datasets[0].pointHoverRadius = pointHoverRadii;
+            currentChart.update();
+        }
+
+        function switchModelTab(tabId) {
+            const btn1 = document.getElementById('tab-btn-1');
+            const btn2 = document.getElementById('tab-btn-2');
+            const container = document.getElementById('model-content-container');
+
+            if (tabId === 1) {
+                btn1.className = "px-4 py-2 text-sm font-medium border-b-2 border-7A8B7B text-[#2C2925] transition focus:outline-none border-[#7A8B7B]";
+                btn2.className = "px-4 py-2 text-sm font-medium text-[#5C564E] hover:text-[#2C2925] border-b-2 border-transparent transition focus:outline-none";
+                
+                container.innerHTML = `
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                        <div class="p-4 bg-[#FAF9F5] rounded-lg border border-[#E6E2D8]">
+                            <div class="w-10 h-10 rounded-full bg-[#7A8B7B] text-white flex items-center justify-center font-bold mx-auto mb-2">1</div>
+                            <h5 class="font-bold text-sm text-[#2C2925] mb-1">Serbest Enzim & Substrat</h5>
+                            <p class="text-xs text-[#5C564E]">Enzimin aktif merkezi ile substratın dış yüzeyi mükemmel bir geometrik uyuma (anahtar-kilit) sahiptir.</p>
+                        </div>
+                        <div class="p-4 bg-[#FAF9F5] rounded-lg border border-[#E6E2D8]">
+                            <div class="w-10 h-10 rounded-full bg-[#D0A98C] text-white flex items-center justify-center font-bold mx-auto mb-2">2</div>
+                            <h5 class="font-bold text-sm text-[#2C2925] mb-1">Geçici Kompleks Yapısı</h5>
+                            <p class="text-xs text-[#5C564E]">Substrat aktif merkeze bağlanır. Enzim-substrat kompleksi kurulur, aktivasyon enerjisi düşürülür.</p>
+                        </div>
+                        <div class="p-4 bg-[#FAF9F5] rounded-lg border border-[#E6E2D8]">
+                            <div class="w-10 h-10 rounded-full bg-[#8FA490] text-white flex items-center justify-center font-bold mx-auto mb-2">3</div>
+                            <h5 class="font-bold text-sm text-[#2C2925] mb-1">Serbest Enzim & Ürünler</h5>
+                            <p class="text-xs text-[#5C564E]">Reaksiyon biter. Substrat ürüne dönüşmüş olarak ayrılır. Enzim ise hiçbir değişikliğe uğramadan yeni işe hazırdır.</p>
+                        </div>
+                    </div>
+                    <div class="mt-4 p-3 bg-[#F1EFEA] rounded-lg text-xs text-[#4A443C] leading-relaxed">
+                        ⚠️ <strong>Önemli Kural:</strong> Anahtar kilit modeli, her enzimin her maddeyle çalışamayacağını, reaksiyonların neden hücresel düzeyde yüksek özgüllüğe sahip olduğunu açıklar.
+                    </div>
+                `;
+            } else {
+                btn2.className = "px-4 py-2 text-sm font-medium border-b-2 border-7A8B7B text-[#2C2925] transition focus:outline-none border-[#7A8B7B]";
+                btn1.className = "px-4 py-2 text-sm font-medium text-[#5C564E] hover:text-[#2C2925] border-b-2 border-transparent transition focus:outline-none";
+                
+                container.innerHTML = `
+                    <div class="space-y-4">
+                        <p class="text-sm text-[#3E3A35] leading-relaxed">
+                            Hücrede karmaşık yapım ve yıkım işleri bir silsile halinde yürür. Bir enzimin etki edip oluşturduğu <strong>ürün</strong>, bir sonraki aşamadaki başka bir enzimin <strong>substratı</strong> olur.
+                        </p>
+                        <div class="p-4 bg-[#FAF9F5] rounded-xl border border-[#E6E2D8] font-mono text-center text-xs sm:text-sm flex flex-wrap justify-center items-center gap-2">
+                            <span class="bg-white p-2 rounded border border-[#DCD8CD] shadow-2xs font-bold text-[#2C2925]">Madde A</span>
+                            <span class="text-[#7A8B7B] font-bold">─ Enzim 1 ─▶</span>
+                            <span class="bg-white p-2 rounded border border-[#DCD8CD] shadow-2xs font-bold text-[#2C2925]">Madde B</span>
+                            <span class="text-[#D0A98C] font-bold">─ Enzim 2 ─▶</span>
+                            <span class="bg-white p-2 rounded border border-[#DCD8CD] shadow-2xs font-bold text-[#2C2925]">Madde C</span>
+                            <span class="text-[#8FA490] font-bold">─ Enzim 3 ─▶</span>
+                            <span class="bg-[#7A8B7B] text-white p-2 rounded font-bold shadow-2xs">Son Ürün (D)</span>
+                        </div>
+                        <div class="p-3 bg-[#FFF9E6] border border-[#E6D095] rounded-lg text-xs text-[#615433]">
+                            <strong>Negatif Geri Bildirim (Feedback):</strong> Eğer hücrede Son Ürün (D) aşırı miktarda birikirse, bu son ürün giderek ilk baştaki Enzim 1'in aktif merkezine bağlanarak onu kilitler (İnhibisyon). Bu sayede hücre gereksiz hammadde ve enerji harcamasını akıllıca engeller.
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        function renderQuiz() {
+            const container = document.getElementById('quiz-container');
+            container.innerHTML = '';
+
+            quizData.forEach((q, qIdx) => {
+                const qBox = document.createElement('div');
+                qBox.className = 'bg-white p-5 rounded-xl border border-[#E6E2D8] shadow-xs space-y-3';
+                
+                let optionsHtml = '';
+                q.options.forEach((opt, oIdx) => {
+                    optionsHtml += `
+                        <label class="flex items-start p-3 bg-[#FAF9F5] hover:bg-[#F1EFEA] rounded-lg border border-[#E6E2D8] cursor-pointer transition text-xs sm:text-sm">
+                            <input type="radio" name="question-${q.id}" value="${oIdx}" onchange="checkAnswer(${q.id}, ${oIdx})" class="mt-0.5 mr-3 accent-[#7A8B7B]">
+                            <span class="text-[#3E3A35]">${opt}</span>
+                        </label>
+                    `;
+                });
+
+                qBox.innerHTML = `
+                    <div class="flex items-center space-x-2">
+                        <span class="bg-[#EAE8E1] text-[#2C2925] font-bold text-xs px-2.5 py-1 rounded">Soru ${qIdx + 1}</span>
+                    </div>
+                    <h4 class="text-sm sm:text-base font-bold text-[#2C2925]">${q.question}</h4>
+                    <div class="grid grid-cols-1 gap-2 pt-2" id="options-group-${q.id}">
+                        ${optionsHtml}
+                    </div>
+                    <div id="explanation-${q.id}" class="hidden p-3 bg-[#F1EFEA] border-l-4 border-[#7A8B7B] rounded-r-lg text-xs text-[#5C564E] leading-relaxed mt-2">
+                        <strong>Çözüm & Açıklama:</strong> ${q.explanation}
+                    </div>
+                `;
+                container.appendChild(qBox);
+            });
+        }
+
+        function checkAnswer(qId, selectedOpt) {
+            const q = quizData.find(item => item.id === qId);
+            const expBox = document.getElementById(`explanation-${qId}`);
+            const group = document.getElementById(`options-group-${qId}`);
+            
+            const inputs = group.querySelectorAll('input');
+            inputs.forEach(input => input.disabled = true);
+
+            const labels = group.querySelectorAll('label');
+            labels.forEach((label, idx) => {
+                if (idx === q.correct) {
+                    label.classList.add('border-2', 'border-[#7A8B7B]', 'bg-[#F2F6F3]');
+                } else if (idx === selectedOpt && selectedOpt !== q.correct) {
+                    label.classList.add('border-2', 'border-red-300', 'bg-red-50');
+                }
+            });
+
+            expBox.classList.remove('hidden');
+
+            let allAnswered = true;
+            quizData.forEach(item => {
+                const checked = document.querySelector(`input[name="question-${item.id}"]:checked`);
+                if (!checked) allAnswered = false;
+            });
+
+            if (allAnswered) {
+                document.getElementById('quiz-score-banner').classList.remove('hidden');
+            }
+        }
+    </script>
+</body>
+</html>
